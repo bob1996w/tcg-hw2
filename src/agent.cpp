@@ -1,10 +1,18 @@
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <cstring>
 #include <cmath>
+
+
 #include <iostream>
 #include <fstream>
 #include <chrono>
 #include <functional>
+#include <vector>
+
+#include "board.hpp"
+
 using namespace std;
 
 fstream flog;
@@ -30,8 +38,10 @@ int main (int argv, char* argc[]) {
 
     srand(time(NULL));
 
+    double time = timer(true);
     while (true) {
-        
+        time = timer(false);
+        if (time >= 1.0) break;
     };
 
     return 0;
