@@ -19,6 +19,7 @@ fstream flog;
 bool myTurn = false;
 char ourPlayer;
 inline void flipBit(bool &v) { v = !v; }
+GameBoard* b;
 
 void logger(string fileName) {
     flog.open(fileName, fstream::out);
@@ -47,21 +48,20 @@ int main (int argv, char* argc[]) {
 #endif
 
     do {
-        GameBoard b;
+        b = new GameBoard;
         // read initial board from pipe
-        b.readBoard();
+        b->readBoard();
         // am I first player ('f') or second player ('s') ?
         ourPlayer = getchar();
 #ifdef LOG
-        flog << b << endl;
+        flog << *b << endl;
         flog << "ourPlayer: " << ourPlayer << endl;
 #endif
-        
-        
         for (myTurn = (ourPlayer == 'f'); ; flipBit(myTurn)) {
 
         }
 
+        delete b;
     } while (getchar() == 'y');
     
 
