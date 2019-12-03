@@ -16,6 +16,10 @@
 using namespace std;
 
 fstream flog;
+bool myTurn = false;
+char ourPlayer;
+inline void flipBit(bool &v) { v = !v; }
+
 void logger(string fileName) {
     flog.open(fileName, fstream::out);
     if (!flog.is_open()) {
@@ -38,11 +42,28 @@ int main (int argv, char* argc[]) {
 
     srand(time(NULL));
 
-    double time = timer(true);
-    while (true) {
-        time = timer(false);
-        if (time >= 1.0) break;
-    };
+#ifdef LOG
+    logger("myAgent.log.txt");
+#endif
+
+    do {
+        GameBoard b;
+        // read initial board from pipe
+        b.readBoard();
+        // am I first player ('f') or second player ('s') ?
+        ourPlayer = getchar();
+#ifdef LOG
+        flog << b << endl;
+        flog << "ourPlayer: " << ourPlayer << endl;
+#endif
+        
+        
+        for (myTurn = (ourPlayer == 'f'); ; flipBit(myTurn)) {
+
+        }
+
+    } while (getchar() == 'y');
+    
 
     return 0;
 }

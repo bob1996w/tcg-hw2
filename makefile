@@ -3,8 +3,8 @@ DEL = rm -f
 
 all: src/agent.cpp
 	mkdir -p target
-	$(CPLUSPLUS) src/*.cpp -c
-	$(CPLUSPLUS) agent.o -o target/agent
+	$(CPLUSPLUS) src/agent.cpp -o target/agent
+	$(CPLUSPLUS) -D LOG src/agent.cpp -o target/agent-log
 	$(DEL) *.o
 
 clean:
