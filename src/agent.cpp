@@ -20,6 +20,7 @@ bool myTurn = false;
 char ourPlayer;
 inline void flipBit(bool &v) { v = !v; }
 GameBoard* b;
+int num, mov;
 
 void logger(string fileName) {
     flog.open(fileName, fstream::out);
@@ -55,10 +56,20 @@ int main (int argv, char* argc[]) {
         ourPlayer = getchar();
 #ifdef LOG
         flog << *b << endl;
-        flog << "ourPlayer: " << ourPlayer << endl;
+        flog << "ourPlayer: " << ourPlayer << endl << flush;
 #endif
         for (myTurn = (ourPlayer == 'f'); ; flipBit(myTurn)) {
+            if (myTurn) {
 
+            }
+
+            // not myTurn
+            else {
+                num = getchar();
+                mov = getchar();
+                flog << "enemy: " << num << mov << endl;
+                b->applyMove(num, mov);
+            }
         }
 
         delete b;
