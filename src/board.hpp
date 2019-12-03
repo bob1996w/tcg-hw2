@@ -50,8 +50,17 @@ struct _space {
     };
     // color = 0 (RED) or 1(BLUE) or -1 (empty), num = 0 ~ 5
     _space (int position, int color = 0, int num = 0) {
-        cubeNumber = (color == -1) ? 0 : (color == 0) ? num + 1 : -num - 1;
+        setSpace(color, num);
         pos = position;
+    }
+    void setSpaceEmpty () {
+        cubeNumber = 0;
+    }
+    void setSpace (int color, int num) {
+        cubeNumber = (color == -1) ? 0 : (color == 0) ? num + 1 : -num - 1;
+    }
+    void setSpace (_space &sp) {
+        cubeNumber = sp.cubeNumber;
     }
     bool hasCube () { return cubeNumber != 0; }
     bool color () { return cubeNumber < 0; } // no cube returns RED!
@@ -73,8 +82,8 @@ ostream& operator<< (ostream &os, Space &sp) {
 const array<int, CUBE_NUM> init_cube_pos[2] = {
 	{ 0,  1,  2,  6,  7, 12},
 	{23, 28, 29, 33, 34, 35}};
-const int dx[2][3] = {{1, 0, 1}, {-1, 0, -1}};
-const int dy[2][3] = {{0, 1, 1}, {0, -1, -1}};
+const int dx[2][3] = {{0, 1, 1}, {0, -1, -1}};
+const int dy[2][3] = {{1, 0, 1}, {-1, 0, -1}};
 
 // TODO: is move needed?
 struct _game_board {
@@ -83,6 +92,7 @@ struct _game_board {
 
     Space board[BOARD_AREA];
     bool turn = 0; // 0 = red (upper left), 1 = blue (lower right)
+    int cubesLeft[2] = {6, 6};
     
     void readBoard () {
         string num[2];
@@ -102,11 +112,11 @@ struct _game_board {
 
     }
 
-    bool isOut (int x, int y) {
+    bool isOut (int y, int x) {
         return (x < 0 || y < 0 || x >= BOARD_WIDTH || y >= BOARD_HEIGHT);
     }
 
-    bool isOccupied (int x, int y) {
+    bool isOccupied (int y, int x) {
         return board[y * BOARD_WIDTH + x].hasCube();
     }
 
@@ -114,9 +124,10 @@ struct _game_board {
 
     // return (-100, -100) if not found
     PII findCube (int color, int num) {
-        int cubeNumber = (color > 0) ? num : -num;
+        int cubeNumber = (color == RED) ? num + 1: -num - 1;
         for (int i = 0; i < BOARD_AREA; ++i) {
             if (board[i].cubeNumber == cubeNumber) {
+                cout << i << endl;
                 return make_pair(i / BOARD_WIDTH, i % BOARD_WIDTH);
             }
         }
@@ -124,13 +135,24 @@ struct _game_board {
     }
 
 
-    void applyMove (int num, int move) {
-        if (num == 15 && move == 15) { // ??: pass
+    void applyMove (int num, int dir) {
+        if (num == 15 && dir == 15) { // ??: pass
             nextTurn();
             return;
         }
-        PII pos = findCube(turn, move);
-        // TODO: finish applying move
+        PII pos = findCube(turn, num);
+        int yy = pos.first + dy[turn][dir];
+        int xx = pos.second + dx[turn][dir];
+        int currentPos = pos.first * BOARD_WIDTH + pos.second;
+        int nextPos = yy * BOARD_WIDTH + xx;
+        if (isOccupied(yy, xx)) {
+            // eat
+            (board[nextPos].color() == RED)? cubesLeft[RED]-- : cubesLeft[BLUE]--;
+        }
+        // swap the cubes
+        board[nextPos].setSpace(board[currentPos]);
+        board[currentPos].setSpaceEmpty();
+        nextTurn();
     }
 
     // TODO: what should be added to board?
@@ -138,6 +160,7 @@ struct _game_board {
 using GameBoard = _game_board;
 
 ostream& operator<< (ostream &os, GameBoard &b) {
+    os << "CubeLeft: +RED " << b.cubesLeft[RED] << ", -BLUE " << b.cubesLeft[BLUE] << endl;
     for (int i = 0; i < BOARD_AREA; ++i) {
         os << b.board[i] << " \n"[i % BOARD_WIDTH == (BOARD_WIDTH - 1)];
     }

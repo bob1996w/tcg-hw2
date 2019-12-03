@@ -55,21 +55,28 @@ int main (int argv, char* argc[]) {
         // am I first player ('f') or second player ('s') ?
         ourPlayer = getchar();
 #ifdef LOG
-        flog << *b << endl;
-        flog << "ourPlayer: " << ourPlayer << endl << flush;
+        flog << *b;
+        flog << "ourPlayer: " << ourPlayer << endl << endl;
+        flog << "=====START=====" << endl;
 #endif
         for (myTurn = (ourPlayer == 'f'); ; flipBit(myTurn)) {
             if (myTurn) {
-
+                num = getchar() - '0';
+                mov = getchar() - '0';
+                flog << "me: " << (int)num << (int)mov << endl;
+                b->applyMove(num, mov);
             }
 
             // not myTurn
             else {
-                num = getchar();
-                mov = getchar();
-                flog << "enemy: " << num << mov << endl;
+                num = getchar() - '0';
+                mov = getchar() - '0';
+                flog << "enemy: " << (int)num << (int)mov << endl;
                 b->applyMove(num, mov);
             }
+#ifdef LOG
+            flog << *b << endl;
+#endif
         }
 
         delete b;
