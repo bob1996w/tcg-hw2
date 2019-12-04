@@ -61,21 +61,26 @@ int main (int argv, char* argc[]) {
 #endif
         for (myTurn = (ourPlayer == 'f'); ; flipBit(myTurn)) {
             if (myTurn) {
-                num = getchar() - '0';
-                mov = getchar() - '0';
-                flog << "me: " << (int)num << (int)mov << endl;
-                b->applyMove(num, mov);
-            }
+                auto moves = b->getAllMoves();
+                auto move = moves.at(getUniformIntRand(moves.size()));
+#ifdef LOG
+                flog << "me: " << b->sendMove(move) << endl << flush;
+#endif
+                b->applyMove(move);
+                cout << b->sendMove(move) << flush;
+            }   
 
             // not myTurn
             else {
                 num = getchar() - '0';
                 mov = getchar() - '0';
+#ifdef LOG
                 flog << "enemy: " << (int)num << (int)mov << endl;
+#endif
                 b->applyMove(num, mov);
             }
 #ifdef LOG
-            flog << *b << endl;
+            flog << *b << endl << flush;
 #endif
         }
 

@@ -16,6 +16,7 @@
 #include <vector>
 #include <chrono>
 #include <algorithm>
+#include <random>
 
 using namespace std;
 
@@ -218,13 +219,42 @@ struct _game_board {
         board[currentPos].setSpaceEmpty();
         nextTurn();
     }
+    void applyMove (PII move) {
+        applyMove(move.first, move.second);
+    }
+
+    // vector<num, dir>
+    VII getAllMoves () {
+        VII res;
+        for (int num = 0; num < CUBE_NUM; ++num) {
+            PII pos = findCube(turn, num);
+            for (int dir = 0; dir < 3; ++dir) {
+                int yy = pos.first + dy[turn][dir];
+                int xx = pos.second + dx[turn][dir];
+                if (isOut(yy, xx)) {
+                    continue;
+                }
+                res.emplace_back(num, dir);
+            }
+        }
+        if (res.empty()) {
+            res.emplace_back(15, 15); // ?? for skip
+        }
+        return res;
+    }
+
+    string sendMove(PII move) {
+        string send;
+        send += (char)(move.first + '0');
+        send += (char)(move.second + '0');
+        return send;
+    }
 
     // TODO: what should be added to board?
 };
 using GameBoard = _game_board;
 
 ostream& operator<< (ostream &os, GameBoard &b) {
-    os << "Turn: " << ((b.turn == RED) ? "RED" : "BLUE") << endl;
     for (int p = 0; p < PLAYER_NUM; ++p) {
         for (int j = 0; j < CUBE_NUM; ++j) {
             os << b.cubes[p][j].printDetail() << endl;
@@ -234,9 +264,19 @@ ostream& operator<< (ostream &os, GameBoard &b) {
     for (int i = 0; i < BOARD_AREA; ++i) {
         os << b.board[i] << " \n"[i % BOARD_WIDTH == (BOARD_WIDTH - 1)];
     }
+    os << "NextTurn: " << ((b.turn == RED) ? "RED" : "BLUE") << endl;
     return os;
 }
 
-
+// generate number: integer in [min, max)
+int getUniformIntRand(int min, int max) {
+    static mt19937_64 randomEngine(random_device{}());
+    uniform_int_distribution<int> d(min, max - 1);
+    return d(randomEngine);
+}
+// generate number: integer in [0, max)
+int getUniformIntRand(int max) {
+    return getUniformIntRand(0, max);
+}
 
 #endif
