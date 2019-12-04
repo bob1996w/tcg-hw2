@@ -63,8 +63,9 @@ int main (int argv, char* argc[]) {
 #endif
         for (myTurn = (ourPlayer == 'f'); b->winner == 2; flipBit(myTurn)) {
             if (myTurn) {
-                auto moves = b->getAllMoves();
-                auto move = moves.at(getUniformIntRand(moves.size()));
+                // auto moves = b->getAllMoves();
+                // auto move = moves.at(getUniformIntRand(moves.size()));
+                auto move = b->getRandomMove();
 #ifdef LOG
                 flog << "me: " << b->sendMove(move) << endl << flush;
 #endif

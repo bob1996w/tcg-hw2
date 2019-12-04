@@ -33,6 +33,12 @@ using namespace std;
 #define ABS(x) ((x > 0)? x : -x)
 
 extern fstream flog; // agent.cpp
+static mt19937_64 randomEngine(random_device{}());
+int getUniformIntRandFixedSize(int); 
+
+const int RANDOM_DIR[6][3] = {
+    {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}
+};
 
 struct _cube {
     /*
@@ -249,6 +255,32 @@ struct _game_board {
         return res;
     }
 
+    PII getRandomMove () {
+        int nodeList[6] = {0, 1, 2, 3, 4, 5};
+        int num, dirSeq, dir, yy, xx;
+        PII pos;
+        // Fisher–Yates shuffle
+        for (int i = 0; i < 5; ++i) {
+            swap (nodeList[i], nodeList[i + getUniformIntRandFixedSize(6 - i)]);
+        }
+        for (int i = 0; i < CUBE_NUM; ++i) {
+            num = nodeList[i];
+            if (cubes[turn][num].isOnBoard()) {
+                pos = findCube(turn, num);
+                dirSeq = getUniformIntRandFixedSize(3);
+                for (int j = 0; j < 3; ++j) {
+                    dir = RANDOM_DIR[dirSeq][j];
+                    yy = pos.first + dy[turn][dir];
+                    xx = pos.second + dx[turn][dir];
+                    if (!isOut(yy, xx)) {
+                        return make_pair(num, dir);
+                    }
+                }
+            }
+        }
+        return make_pair(15, 15);
+    }
+
     string sendMove(PII move) {
         string send;
         send += (char)(move.first + '0');
@@ -300,13 +332,31 @@ ostream& operator<< (ostream &os, GameBoard &b) {
 
 // generate number: integer in [min, max)
 int getUniformIntRand(int min, int max) {
-    static mt19937_64 randomEngine(random_device{}());
     uniform_int_distribution<int> d(min, max - 1);
     return d(randomEngine);
 }
 // generate number: integer in [0, max)
 int getUniformIntRand(int max) {
     return getUniformIntRand(0, max);
+}
+
+// generate number: integer in [0, max), max = 1 ~ 6
+int getUniformIntRandFixedSize (int max) {
+    static uniform_int_distribution<int> dist[6] = {
+        uniform_int_distribution<int>(0, 0),
+        uniform_int_distribution<int>(0, 1),
+        uniform_int_distribution<int>(0, 2),
+        uniform_int_distribution<int>(0, 3),
+        uniform_int_distribution<int>(0, 4),
+        uniform_int_distribution<int>(0, 5)
+    };
+    return dist[max - 1](randomEngine);
+}
+
+void swap (int& a, int& b) {
+    int t = a;
+    a = b;
+    b = t;
 }
 
 #endif
