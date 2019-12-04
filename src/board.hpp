@@ -27,6 +27,8 @@ using namespace std;
 #define CUBE_NUM 6
 #define RED 0
 #define BLUE 1
+#define R_CORNER 0
+#define B_CORNER 35
 
 #define ABS(x) ((x > 0)? x : -x)
 
@@ -136,6 +138,7 @@ const array<int, CUBE_NUM> init_cube_pos[2] = {
 	{23, 28, 29, 33, 34, 35}};
 const int dx[2][3] = {{0, 1, 1}, {0, -1, -1}};
 const int dy[2][3] = {{1, 0, 1}, {-1, 0, -1}};
+const int statusToWinner[4] = {2, 0, 1, 3};
 
 // TODO: is move needed?
 struct _game_board {
@@ -147,7 +150,8 @@ struct _game_board {
     int cubesLeft[2] = {CUBE_NUM, CUBE_NUM};
     Cube initialCubes[PLAYER_NUM][CUBE_NUM];
     Cube cubes[PLAYER_NUM][CUBE_NUM];
-    
+    int winner = 2; // 0 = RED, 1 = BLUE, 2 = not decided, 3 = draw
+
     void readBoard () {
         string num[2];
         for (int i = 0; i < PLAYER_NUM; ++i) {
@@ -217,6 +221,8 @@ struct _game_board {
         // swap the cubes
         board[nextPos].moveCubeFrom(board[currentPos]);
         board[currentPos].setSpaceEmpty();
+
+        updateWinner(checkWin());
         nextTurn();
     }
     void applyMove (PII move) {
@@ -248,6 +254,30 @@ struct _game_board {
         send += (char)(move.first + '0');
         send += (char)(move.second + '0');
         return send;
+    }
+
+    // 0: not over, 1: RED win, 2: BLUE win, 3: draw
+    int checkWin () {
+        if (cubesLeft[BLUE] == 0) { return 1; }
+        if (cubesLeft[RED] == 0) { return 2; }
+        if (board[R_CORNER].hasCube() && board[R_CORNER].c->color() == BLUE && 
+                board[B_CORNER].hasCube() && board[B_CORNER].c->color() == RED) {
+            if (board[R_CORNER].c->num() < board[B_CORNER].c->num()) {
+                return 2;
+            }
+            else if (board[R_CORNER].c->num() > board[B_CORNER].c->num()) {
+                return 1;
+            }
+            else {
+                return 3;
+            }
+        }
+        return 0;
+    }
+
+    // status from checkWin
+    void updateWinner (int status) {
+        winner = statusToWinner[status];
     }
 
     // TODO: what should be added to board?

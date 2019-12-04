@@ -20,6 +20,7 @@ bool myTurn = false;
 char ourPlayer;
 inline void flipBit(bool &v) { v = !v; }
 GameBoard* b;
+int game = 0;
 int num, mov;
 
 void logger(string fileName) {
@@ -55,11 +56,12 @@ int main (int argv, char* argc[]) {
         // am I first player ('f') or second player ('s') ?
         ourPlayer = getchar();
 #ifdef LOG
+        flog << "===== GAME #" << game << " =====" << endl; 
         flog << *b;
         flog << "ourPlayer: " << ourPlayer << endl << endl;
         flog << "=====START=====" << endl;
 #endif
-        for (myTurn = (ourPlayer == 'f'); ; flipBit(myTurn)) {
+        for (myTurn = (ourPlayer == 'f'); b->winner == 2; flipBit(myTurn)) {
             if (myTurn) {
                 auto moves = b->getAllMoves();
                 auto move = moves.at(getUniformIntRand(moves.size()));
@@ -83,8 +85,12 @@ int main (int argv, char* argc[]) {
             flog << *b << endl << flush;
 #endif
         }
-
+#ifdef LOG
+        flog << "winner: " << "rb_x"[b->winner] << endl;
+        flog << "=====END=====" << endl << flush;
+#endif
         delete b;
+        game++;
     } while (getchar() == 'y');
     
 
