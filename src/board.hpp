@@ -171,14 +171,15 @@ struct _game_board {
                 initialCubes[p][i] = b->initialCubes[p][i];
                 cubes[p][i] = b->cubes[p][i];
             }
+            initialCubesLeft[p] = b->initialCubesLeft[p];
             cubesLeft[p] = b->cubesLeft[p];
         }
         turn = b->turn;
         initialWinner = b->initialWinner;
         winner = b->winner;
         // reverseCopyCube();
-        resetBoard();
         setCurrentAsInitial();
+        resetBoard();
     }
 
     // set the initial board/cube as "after" applying the initial move
@@ -188,6 +189,7 @@ struct _game_board {
                 initialCubes[p][i] = b->initialCubes[p][i];
                 cubes[p][i] = b->cubes[p][i];
             }
+            initialCubesLeft[p] = b->initialCubesLeft[p];
             cubesLeft[p] = b->cubesLeft[p];
         }
         turn = b->turn;
@@ -303,7 +305,7 @@ struct _game_board {
         VII res;
         for (int num = 0; num < CUBE_NUM; ++num) {
             PII pos = findCube(turn, num);
-            if (pos.first == 100) {
+            if (pos.first == -100) {
                 continue;
             }
             for (int dir = 0; dir < 3; ++dir) {
@@ -313,8 +315,8 @@ struct _game_board {
                     continue;
                 }
 #ifdef LOG
-                flog << "turn " << turn << endl;
-                flog << "num dir = " << num << " " << dir << endl << flush;
+                // flog << "turn " << turn << endl;
+                // flog << "num dir = " << num << " " << dir << endl << flush;
 #endif
                 res.emplace_back(num, dir);
             }
@@ -470,8 +472,20 @@ struct TreeNode {
 
     void runRandomTrial (int numTrial, bool ourPlayer) {
         for (int t = 0; t < numTrial; ++t) {
+            int turns = 0;
             while (board.winner == 2) {
-                board.applyMove(board.getRandomMove());
+                pair<int, int> move = board.getRandomMove();
+                board.applyMove(move);
+#ifdef LOG
+                // flog << t << " " << board.winner << endl;
+#endif
+                turns += 1;
+                if (turns >= 70) {
+#ifdef LOG
+                    flog << "turn > 70 error, dump board\n" << board << endl << flush;
+#endif
+                    break;
+                }
             }
             if (board.winner == ourPlayer) {
                 score += 1;
@@ -486,6 +500,9 @@ struct TreeNode {
     // return the best children
     void runRandomTrialForAllChildren (int numTrial, bool ourPlayer) {
         for (int c = 0; c < childCount; ++c) {
+#ifdef LOG
+            flog << "running child " << c << endl << flush;
+#endif
             child[c]->runRandomTrial(numTrial, ourPlayer);
             trial += numTrial;
             score += child[c]->score;
@@ -510,7 +527,7 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode (&board, possibleMoves[c] ,this);
         }
-        runRandomTrialForAllChildren (3000, ourPlayer);
+        runRandomTrialForAllChildren (10, ourPlayer);
         int bestMove = 0;
         double bestScore = child[0]->UCBScore(sqrtLogN), s;
         for (int i = 1; i < childCount; ++i) {
