@@ -92,6 +92,14 @@ struct _cube {
     string printDetail () {
         return ((color() == RED) ? " RED +" : "BLUE -") + to_string(num()) + (isOnBoard()? " y=" + to_string(y()) + ", x=" + to_string(x()) : " Removed");
     }
+
+    string printOstream () {
+        string ret;
+        if (color() == RED) {ret += "+";}
+        else {ret += "-";}
+        ret += to_string(num());
+        return ret;
+    }
 };
 using Cube = _cube;
 
@@ -133,6 +141,13 @@ struct _space {
     bool hasCube () { return c != nullptr; }
     int x () { return pos % BOARD_WIDTH; }
     int y () { return pos / BOARD_WIDTH; }
+
+    string printOstream () {
+        string ret;
+        if (!hasCube()) { ret += "__"; }
+        else {ret += c->printOstream(); }
+        return ret;
+    }
     // TODO: what should be added to space?
 };
 using Space = _space;
@@ -186,13 +201,14 @@ struct _game_board {
     void setBoardAs (_game_board* b, PII initialMove) {
         for (int p = 0; p < 2; ++p) {
             for (int i = 0; i < CUBE_NUM; ++i) {
-                initialCubes[p][i] = b->initialCubes[p][i];
+                initialCubes[p][i] = b->cubes[p][i];
                 cubes[p][i] = b->cubes[p][i];
             }
-            initialCubesLeft[p] = b->initialCubesLeft[p];
+            initialCubesLeft[p] = b->cubesLeft[p];
             cubesLeft[p] = b->cubesLeft[p];
         }
         turn = b->turn;
+        initialTurn = b->turn;
         initialWinner = b->initialWinner;
         winner = b->winner;
         resetBoard();
@@ -384,6 +400,21 @@ struct _game_board {
         winner = statusToWinner[status];
     }
 
+    string printOstream() {
+        string ret;
+        for (int p = 0; p < PLAYER_NUM; ++p) {
+            for (int j = 0; j < CUBE_NUM; ++j) {
+                ret += string(cubes[p][j].printDetail()) + "\n";
+            }
+        }
+        ret += ("CubeLeft: +RED " + to_string(cubesLeft[RED]) + ", -BLUE " + to_string(cubesLeft[BLUE]) + "\n");
+        for (int i = 0; i < BOARD_AREA; ++i) {
+            ret += (board[i].printOstream() + " \n"[i % BOARD_WIDTH == (BOARD_WIDTH - 1)]);
+        }
+        ret += ("NextTurn: " + string((turn == RED) ? "RED" : "BLUE") + "\n");
+        return ret;
+    }
+
     // TODO: what should be added to board?
 };
 using GameBoard = _game_board;
@@ -480,9 +511,9 @@ struct TreeNode {
                 // flog << t << " " << board.winner << endl;
 #endif
                 turns += 1;
-                if (turns >= 70) {
+                if (turns >= 200) {
 #ifdef LOG
-                    flog << "turn > 70 error, dump board\n" << board << endl << flush;
+                    flog << "turn > 200 error, dump board\n" << board << endl << flush;
 #endif
                     break;
                 }
@@ -527,7 +558,7 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode (&board, possibleMoves[c] ,this);
         }
-        runRandomTrialForAllChildren (10, ourPlayer);
+        runRandomTrialForAllChildren (3000, ourPlayer);
         int bestMove = 0;
         double bestScore = child[0]->UCBScore(sqrtLogN), s;
         for (int i = 1; i < childCount; ++i) {
