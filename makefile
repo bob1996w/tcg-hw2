@@ -1,10 +1,12 @@
 CPLUSPLUS = g++ -std=c++11 -O2 -Wall
 DEL = rm -f
 
-all: src/agent.cpp board.cpp
+all: src/agent.cpp src/board.hpp src/agentRT.cpp
 	mkdir -p target
 	$(CPLUSPLUS) src/agent.cpp -o target/agent
-	$(CPLUSPLUS) -D LOG src/agent.cpp -o target/agent-log
+	$(CPLUSPLUS) -D LOG src/agent.cpp -o target/agent-log -g
+	$(CPLUSPLUS) src/agentRT.cpp -o target/agentRT
+	$(CPLUSPLUS) -D LOG src/agentRT.cpp -o target/agentRT-log -g
 	$(DEL) *.o
 
 testRandom: src/testRandom.cpp

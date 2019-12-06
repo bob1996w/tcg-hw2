@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
+#include <cmath>
 
 #include <iostream>
 #include <fstream>
@@ -29,6 +30,9 @@ using namespace std;
 #define BLUE 1
 #define R_CORNER 0
 #define B_CORNER 35
+#define NEXT_MOVE_NUM 18
+
+const double UCB_C = 1.18;
 
 #define ABS(x) ((x > 0)? x : -x)
 
@@ -153,10 +157,46 @@ struct _game_board {
 
     Space board[BOARD_AREA];
     bool turn = 0; // 0 = red (upper left), 1 = blue (lower right)
+    bool initialTurn = 0;
+    int initialCubesLeft[2] = {CUBE_NUM, CUBE_NUM};
     int cubesLeft[2] = {CUBE_NUM, CUBE_NUM};
     Cube initialCubes[PLAYER_NUM][CUBE_NUM];
     Cube cubes[PLAYER_NUM][CUBE_NUM];
+    int initialWinner = 2;
     int winner = 2; // 0 = RED, 1 = BLUE, 2 = not decided, 3 = draw
+
+    void setBoardAs (_game_board* b) {
+        for (int p = 0; p < 2; ++p) {
+            for (int i = 0; i < CUBE_NUM; ++i) {
+                initialCubes[p][i] = b->initialCubes[p][i];
+                cubes[p][i] = b->cubes[p][i];
+            }
+            cubesLeft[p] = b->cubesLeft[p];
+        }
+        turn = b->turn;
+        initialWinner = b->initialWinner;
+        winner = b->winner;
+        // reverseCopyCube();
+        resetBoard();
+        setCurrentAsInitial();
+    }
+
+    // set the initial board/cube as "after" applying the initial move
+    void setBoardAs (_game_board* b, PII initialMove) {
+        for (int p = 0; p < 2; ++p) {
+            for (int i = 0; i < CUBE_NUM; ++i) {
+                initialCubes[p][i] = b->initialCubes[p][i];
+                cubes[p][i] = b->cubes[p][i];
+            }
+            cubesLeft[p] = b->cubesLeft[p];
+        }
+        turn = b->turn;
+        initialWinner = b->initialWinner;
+        winner = b->winner;
+        resetBoard();
+        applyMove(initialMove);
+        setCurrentAsInitial();
+    }
 
     void readBoard () {
         string num[2];
@@ -178,6 +218,21 @@ struct _game_board {
         resetBoard();
     }
 
+    void reverseCopyCube () {
+        for (int i = 0; i < CUBE_NUM; ++i) {
+            initialCubes[RED][i] = cubes[RED][i];
+            initialCubes[BLUE][i] = cubes[BLUE][i];
+        }
+    }
+
+    void setCurrentAsInitial () {
+        initialTurn = turn;
+        initialWinner = winner;
+        initialCubesLeft[0] = cubesLeft[0];
+        initialCubesLeft[1] = cubesLeft[1];
+        reverseCopyCube();
+    }
+
     void resetBoard () {
         for (int i = 0; i < BOARD_AREA; ++i) {
             board[i] = Space(i);
@@ -185,9 +240,17 @@ struct _game_board {
         for (int i = 0; i < CUBE_NUM; ++i) {
             cubes[RED][i] = initialCubes[RED][i];
             cubes[BLUE][i] = initialCubes[BLUE][i];
-            board[cubes[RED][i].pos] = Space(cubes[RED][i].pos, &cubes[RED][i]);
-            board[cubes[BLUE][i].pos] = Space(cubes[BLUE][i].pos, &cubes[BLUE][i]);
+            if (cubes[RED][i].isOnBoard()) {
+                board[cubes[RED][i].pos] = Space(cubes[RED][i].pos, &cubes[RED][i]);
+            }
+            if (cubes[BLUE][i].isOnBoard()) {
+                board[cubes[BLUE][i].pos] = Space(cubes[BLUE][i].pos, &cubes[BLUE][i]);
+            }
         }
+        turn = initialTurn;
+        winner = initialWinner;
+        cubesLeft[0] = initialCubesLeft[0];
+        cubesLeft[1] = initialCubesLeft[1];
     }
 
     bool isOut (int y, int x) {
@@ -240,12 +303,19 @@ struct _game_board {
         VII res;
         for (int num = 0; num < CUBE_NUM; ++num) {
             PII pos = findCube(turn, num);
+            if (pos.first == 100) {
+                continue;
+            }
             for (int dir = 0; dir < 3; ++dir) {
                 int yy = pos.first + dy[turn][dir];
                 int xx = pos.second + dx[turn][dir];
                 if (isOut(yy, xx)) {
                     continue;
                 }
+#ifdef LOG
+                flog << "turn " << turn << endl;
+                flog << "num dir = " << num << " " << dir << endl << flush;
+#endif
                 res.emplace_back(num, dir);
             }
         }
@@ -316,17 +386,17 @@ struct _game_board {
 };
 using GameBoard = _game_board;
 
-ostream& operator<< (ostream &os, GameBoard &b) {
+ostream& operator<< (ostream &os, GameBoard& b) {
     for (int p = 0; p < PLAYER_NUM; ++p) {
         for (int j = 0; j < CUBE_NUM; ++j) {
-            os << b.cubes[p][j].printDetail() << endl;
+            os << b.cubes[p][j].printDetail() << endl << flush;
         }
     }
-    os << "CubeLeft: +RED " << b.cubesLeft[RED] << ", -BLUE " << b.cubesLeft[BLUE] << endl;
+    os << "CubeLeft: +RED " << b.cubesLeft[RED] << ", -BLUE " << b.cubesLeft[BLUE] << endl << flush;
     for (int i = 0; i < BOARD_AREA; ++i) {
         os << b.board[i] << " \n"[i % BOARD_WIDTH == (BOARD_WIDTH - 1)];
     }
-    os << "NextTurn: " << ((b.turn == RED) ? "RED" : "BLUE") << endl;
+    os << "NextTurn: " << ((b.turn == RED) ? "RED" : "BLUE") << endl << flush;
     return os;
 }
 
@@ -358,5 +428,103 @@ void swap (int& a, int& b) {
     a = b;
     b = t;
 }
+
+// Monte-Carlo tree node
+struct TreeNode {
+    using PII = pair<int, int>;
+    using VII = vector<PII>;
+
+    TreeNode* child[NEXT_MOVE_NUM];
+    TreeNode* parent = nullptr;
+    int childCount = 0;
+    int score = 0;              // in random trials, how many leads to win
+    int trial = 0;              // total trials tried for this node
+    double winRate = 0.0;       // = score / trial
+    double sqrtLogN = 0.0;      // sqrt(log(trial))
+
+    GameBoard board;
+
+    TreeNode () = delete;
+
+    TreeNode (GameBoard* currentBoard, TreeNode* parentPtr = nullptr) {
+        board = GameBoard();
+        board.setBoardAs(currentBoard);
+        parent = parentPtr;
+    }
+
+    TreeNode (GameBoard* currentBoard, PII initialMove, TreeNode* parentPtr) {
+        board = GameBoard();
+        board.setBoardAs(currentBoard, initialMove);
+        // flog << board << endl << flush;
+        parent = parentPtr;
+    }
+
+    // slow code
+    double slowUCBScore (int totalTrial) {
+        return winRate + sqrt(log(totalTrial) / trial);
+    }
+
+    double UCBScore (float sqrtLogNTotal) {
+        return winRate + UCB_C * sqrtLogNTotal / sqrtLogN;
+    }
+
+    void runRandomTrial (int numTrial, bool ourPlayer) {
+        for (int t = 0; t < numTrial; ++t) {
+            while (board.winner == 2) {
+                board.applyMove(board.getRandomMove());
+            }
+            if (board.winner == ourPlayer) {
+                score += 1;
+            }
+            board.resetBoard();
+        }
+        trial += numTrial;
+        winRate = (double)score / trial;
+        sqrtLogN = sqrt(log(trial));
+    }
+
+    // return the best children
+    void runRandomTrialForAllChildren (int numTrial, bool ourPlayer) {
+        for (int c = 0; c < childCount; ++c) {
+            child[c]->runRandomTrial(numTrial, ourPlayer);
+            trial += numTrial;
+            score += child[c]->score;
+        }
+        // TODO: update winRate
+        winRate = score / trial;
+        // TODO: update sqrtLogN
+        sqrtLogN = sqrt(log(trial));
+    }
+
+    PII getRandomTrialScoreMove () {
+        bool ourPlayer = board.turn;
+        VII possibleMoves = board.getAllMoves();
+        childCount = possibleMoves.size();
+#ifdef LOG
+        flog << "getAllMovesFromThisBoard\n" << board << endl << flush;
+        flog << "childCount = " << childCount << endl << flush;
+#endif
+        if (childCount == 1) {
+            return possibleMoves[0];
+        }
+        for (int c = 0; c < childCount; ++c) {
+            child[c] = new TreeNode (&board, possibleMoves[c] ,this);
+        }
+        runRandomTrialForAllChildren (3000, ourPlayer);
+        int bestMove = 0;
+        double bestScore = child[0]->UCBScore(sqrtLogN), s;
+        for (int i = 1; i < childCount; ++i) {
+            if ((s = child[i]->UCBScore(sqrtLogN)) > bestScore) {
+                bestMove = i;
+                bestScore = s;
+            }
+        }
+#ifdef LOG
+        flog << "Best move: Child " << bestMove << ", best score: " << bestScore << endl << flush;
+#endif
+        return possibleMoves[bestMove];
+    }
+
+};
 
 #endif
