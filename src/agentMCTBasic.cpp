@@ -46,7 +46,7 @@ int main (int argv, char* argc[]) {
     srand(time(NULL));
 
 #ifdef LOG
-    logger("myAgentRT.log.txt");
+    logger("myAgentMCTBasic.log.txt");
 #endif
 
     do {
@@ -64,7 +64,7 @@ int main (int argv, char* argc[]) {
         for (myTurn = (ourPlayer == 'f'); b->winner == 2; flipBit(myTurn)) {
             if (myTurn) {
                 TreeNode* root = new TreeNode(b, nullptr, MAX_NODE);
-                auto move = root->getRandomTrialScoreMove();
+                auto move = root->getMonteCarloBasicMove();
 #ifdef LOG
                 flog << "me: " << b->sendMove(move) << endl << flush;
 #endif

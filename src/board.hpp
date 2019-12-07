@@ -31,8 +31,11 @@ using namespace std;
 #define R_CORNER 0
 #define B_CORNER 35
 #define NEXT_MOVE_NUM 18
+#define MAX_NODE 0
+#define MIN_NODE 1
 
-const double UCB_C = 1.18;
+const double UCB_C = 1.18;      // exploration coefficient of UCB
+const double timerMaxAllow = 2; // max allow time in seconds
 
 #define ABS(x) ((x > 0)? x : -x)
 
@@ -474,22 +477,28 @@ struct TreeNode {
     int trial = 0;              // total trials tried for this node
     double winRate = 0.0;       // = score / trial
     double sqrtLogN = 0.0;      // sqrt(log(trial))
+    bool nodeType = MAX_NODE;   // is this a MAX_NODE (0, player) or MIN_NODE (1, enemy)?
+    int currentBestChild = -1;  // -1: not decided
+    PII move;                   // the move from its parent.
 
     GameBoard board;
 
     TreeNode () = delete;
 
-    TreeNode (GameBoard* currentBoard, TreeNode* parentPtr = nullptr) {
+    TreeNode (GameBoard* currentBoard, TreeNode* parentPtr = nullptr, bool type = MAX_NODE) {
         board = GameBoard();
         board.setBoardAs(currentBoard);
         parent = parentPtr;
+        nodeType = type;
     }
 
-    TreeNode (GameBoard* currentBoard, PII initialMove, TreeNode* parentPtr) {
+    TreeNode (GameBoard* currentBoard, PII initialMove, TreeNode* parentPtr, bool type = MAX_NODE) {
         board = GameBoard();
         board.setBoardAs(currentBoard, initialMove);
         // flog << board << endl << flush;
         parent = parentPtr;
+        nodeType = type;
+        move = initialMove;
     }
 
     // slow code
@@ -497,8 +506,84 @@ struct TreeNode {
         return winRate + sqrt(log(totalTrial) / trial);
     }
 
-    double UCBScore (float sqrtLogNTotal) {
+    double UCBScore (double sqrtLogNTotal) {
         return winRate + UCB_C * sqrtLogNTotal / sqrtLogN;
+    }
+
+    double UCBExploreTerm (double sqrtLogNTotal) {
+        return UCB_C * sqrtLogNTotal / sqrtLogN;
+    }
+
+    int findBestWinRate () {
+        if (childCount == 1) { return 0; }
+        int winnerStep = 0;
+        double winnerRate = child[0]->winRate;
+        for (int c = 1; c < childCount; ++c) {
+            if (child[c]->winRate > winnerRate) {
+                winnerStep = c;
+                winnerRate = child[c]->winRate;
+            }
+        }
+        return winnerStep;
+    }
+
+    void updateBestChild () {
+        currentBestChild = findBestChildByUCB();
+    }
+
+    // called by child: parent->updateScoreFromChild
+    void updateScoreFromChild (int scoreAdded, int trialAdded) {
+        score += scoreAdded;
+        trial += trialAdded;
+        winRate = (double)score / trial;
+        sqrtLogN = sqrt(log(trial));
+        if (parent != nullptr) {
+            parent->updateScoreFromChild(scoreAdded, trialAdded);
+            parent->updateBestChild();
+        }
+    }
+
+    // find maximum score in MAX_NODE, find minimum score in MIN_NODE
+    // if no child, return -1
+    int findBestChildByUCB () {
+        if (nodeType == MAX_NODE) {
+            return findMaxChildByUCB();
+        }
+        else {
+            return findMinChildByUCB();
+        }
+    }
+
+    int findMaxChildByUCB () {
+        if (childCount == 0) { return -1; }
+        else if (childCount == 1) { return 0; }
+        else {
+            int bestChild = 0;
+            double bestScore = child[0]->UCBScore(sqrtLogN), s;
+            for (int i = 0; i < childCount; ++i) {
+                if ((s = child[i]->UCBScore(sqrtLogN)) > bestScore) {
+                    bestChild = i;
+                    bestScore = s;
+                }
+            }
+            return bestChild;
+        }
+    }
+
+    int findMinChildByUCB () {
+        if (childCount == 0) { return -1; }
+        else if (childCount == 1) { return 0; }
+        else {
+            int bestChild = 0;
+            double bestScore = child[0]->UCBScore(sqrtLogN), s;
+            for (int i = 0; i < childCount; ++i) {
+                if ((s = child[i]->UCBScore(sqrtLogN)) < bestScore) {
+                    bestChild = i;
+                    bestScore = s;
+                }
+            }
+            return bestChild;
+        }
     }
 
     void runRandomTrial (int numTrial, bool ourPlayer) {
@@ -530,18 +615,24 @@ struct TreeNode {
 
     // return the best children
     void runRandomTrialForAllChildren (int numTrial, bool ourPlayer) {
+        int scoreAdded = 0, trialAdded = 0;
         for (int c = 0; c < childCount; ++c) {
 #ifdef LOG
-            flog << "running child " << c << endl << flush;
+            //flog << "running child " << c << endl << flush;
 #endif
             child[c]->runRandomTrial(numTrial, ourPlayer);
             trial += numTrial;
+            trialAdded += numTrial;
             score += child[c]->score;
+            scoreAdded += child[c]->score;
         }
         // TODO: update winRate
-        winRate = score / trial;
+        winRate = (double)score / trial;
         // TODO: update sqrtLogN
         sqrtLogN = sqrt(log(trial));
+        if (parent != nullptr) {
+            parent->updateScoreFromChild(scoreAdded, trialAdded);
+        }
     }
 
     PII getRandomTrialScoreMove () {
@@ -556,21 +647,74 @@ struct TreeNode {
             return possibleMoves[0];
         }
         for (int c = 0; c < childCount; ++c) {
-            child[c] = new TreeNode (&board, possibleMoves[c] ,this);
+            child[c] = new TreeNode (&board, possibleMoves[c] ,this, MIN_NODE);
         }
         runRandomTrialForAllChildren (3000, ourPlayer);
-        int bestMove = 0;
-        double bestScore = child[0]->UCBScore(sqrtLogN), s;
-        for (int i = 1; i < childCount; ++i) {
-            if ((s = child[i]->UCBScore(sqrtLogN)) > bestScore) {
-                bestMove = i;
-                bestScore = s;
-            }
-        }
+        int bestMove = findBestChildByUCB();
 #ifdef LOG
-        flog << "Best move: Child " << bestMove << ", best score: " << bestScore << endl << flush;
+        flog << "Best move: Child " << bestMove << ", best score: " << child[bestMove]->UCBScore(sqrtLogN) << endl << flush;
 #endif
         return possibleMoves[bestMove];
+    }
+
+    // return false if hit max depth, true otherwise
+    bool pvSearchWithUCB (bool ourPlayer, int maxDepth) {
+        if (maxDepth <= 0) { return false; }
+        if (currentBestChild != -1) {
+            child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
+            return true;
+        }
+        VII possibleMoves = board.getAllMoves();
+        childCount = possibleMoves.size();
+        if (childCount == 1) {
+            currentBestChild = 0;
+            return true;
+        }
+        for (int c = 0; c < childCount; ++c) {
+            child[c] = new TreeNode(&board, possibleMoves[c], this, !nodeType);
+        }
+        runRandomTrialForAllChildren (300, ourPlayer);
+        updateBestChild();
+        return true;
+    }
+
+    PII getMonteCarloBasicMove () {
+        double timerElapsed;
+        decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
+        while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
+                < timerMaxAllow) {
+#ifdef LOG
+            flog << "pvSearch" << endl << flush;
+#endif
+            if (!pvSearchWithUCB (board.turn, 100)) { break; }
+            if (childCount == 1) { break; }
+            updateBestChild();
+        }
+        int bestMove = findBestWinRate();
+#ifdef LOG
+        flog << printNode(0) << endl << flush;
+#endif
+        return child[bestMove]->move;
+    }
+    
+    string printNode (int depth) {
+        string ret;
+        for (int i = 0; i < depth; ++i) {
+            ret += "  ";
+        }
+        ret += "<" + to_string(move.first) + "," + to_string(move.second) + ">";
+        ret += string((nodeType == MAX_NODE)? "+":"-") + " ";
+        ret += to_string(score) + "/" + to_string(trial);
+        ret += " " + to_string(winRate);
+        ret += " best=" + to_string(currentBestChild);
+        if (depth != 0) {
+            ret += " ue" + to_string(UCBExploreTerm(parent->sqrtLogN));
+        }
+        ret += "\n";
+        for (int c = 0; c < childCount; ++c) {
+            ret += child[c]->printNode(depth + 1);
+        }
+        return ret;
     }
 
 };

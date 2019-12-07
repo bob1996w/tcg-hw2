@@ -7,6 +7,8 @@ all: src/agent.cpp src/board.hpp src/agentRT.cpp
 	$(CPLUSPLUS) -D LOG src/agent.cpp -o target/agent-log -g
 	$(CPLUSPLUS) src/agentRT.cpp -o target/agentRT
 	$(CPLUSPLUS) -D LOG src/agentRT.cpp -o target/agentRT-log -g
+	$(CPLUSPLUS) src/agentMCTBasic.cpp -o target/agentMCTBasic
+	$(CPLUSPLUS) -D LOG src/agentMCTBasic.cpp -o target/agentMCTBasic-log -g
 	$(DEL) *.o
 
 testRandom: src/testRandom.cpp
