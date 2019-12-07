@@ -657,7 +657,7 @@ struct TreeNode {
         return possibleMoves[bestMove];
     }
 
-    // return false if hit max depth, true otherwise
+    // return false if should stop searching, true otherwise
     bool pvSearchWithUCB (bool ourPlayer, int maxDepth) {
         if (maxDepth <= 0) { return false; }
         if (currentBestChild != -1) {
@@ -667,6 +667,7 @@ struct TreeNode {
         VII possibleMoves = board.getAllMoves();
         childCount = possibleMoves.size();
         if (childCount == 1) {
+            child[0] = new TreeNode(&board, possibleMoves[0], this, !nodeType);
             currentBestChild = 0;
             return true;
         }
@@ -683,9 +684,6 @@ struct TreeNode {
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
-#ifdef LOG
-            flog << "pvSearch" << endl << flush;
-#endif
             if (!pvSearchWithUCB (board.turn, 100)) { break; }
             if (childCount == 1) { break; }
             updateBestChild();
