@@ -661,9 +661,9 @@ struct TreeNode {
     bool pvSearchWithUCB (bool ourPlayer, int maxDepth) {
         if (maxDepth <= 0) { return false; }
         if (currentBestChild != -1) {
-            child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
-            return true;
+            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
         }
+        if (board.winner != 2) { return false; } // winner decided / draw
         VII possibleMoves = board.getAllMoves();
         childCount = possibleMoves.size();
         if (childCount == 1) {
