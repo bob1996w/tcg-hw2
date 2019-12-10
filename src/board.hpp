@@ -484,6 +484,10 @@ struct TreeNode {
     int currentBestChild = -1;  // -1: not decided
     PII move;                   // the move from its parent.
 
+    // statistics: for each simulation, 1 = win, 0 = draw, -1 = lose
+    int sum1 = 0;               // = \Sigma x_i
+    int sum2 = 0;               // = \Sigma X_i^2
+
     GameBoard board;
 
     TreeNode () = delete;
@@ -515,6 +519,14 @@ struct TreeNode {
 
     double UCBExploreTerm (double sqrtLogNTotal) {
         return UCB_C * sqrtLogNTotal / sqrtLogN;
+    }
+
+    double average () {
+        return (double) sum1 / trial;
+    }
+
+    double variance () {
+        return  (double) (sum2 - 2 * average() * sum1) / trial + average() * average();
     }
 
     // we have to manually calculate win rate here,
@@ -549,10 +561,10 @@ struct TreeNode {
             winRate = (double)scoreLose / trial;
         }
         sqrtLogN = sqrt(log(trial));
+        updateBestChild();
         if (parent != nullptr) {
             //parent->updateScoreFromChild(scoreAdded, trialAdded);
             parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
-            parent->updateBestChild();
         }
     }
 
@@ -645,22 +657,7 @@ struct TreeNode {
             drawAdded += child[c]->scoreDraw;
             loseAdded += child[c]->scoreLose;
         }
-        trial += trialAdded;
-        scoreWin += winAdded;
-        scoreDraw += drawAdded;
-        scoreLose += loseAdded;
-        // TODO: update winRate
-        if (nodeType == MAX_NODE) {
-            winRate = (double)scoreWin / trial;
-        }
-        else {
-            winRate = (double)scoreLose / trial;
-        }
-        // TODO: update sqrtLogN
-        sqrtLogN = sqrt(log(trial));
-        if (parent != nullptr) {
-            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
-        }
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
     }
 
     PII getRandomTrialScoreMove () {
