@@ -561,7 +561,7 @@ struct TreeNode {
             winRate = (double)scoreLose / trial;
         }
         sqrtLogN = sqrt(log(trial));
-        updateBestChild();
+        // updateBestChild();
         if (parent != nullptr) {
             //parent->updateScoreFromChild(scoreAdded, trialAdded);
             parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
@@ -685,8 +685,14 @@ struct TreeNode {
     // return false if should stop searching, true otherwise
     bool pvSearchWithUCB (bool ourPlayer, int maxDepth) {
         if (maxDepth <= 0) { return false; }
+        /*
         if (currentBestChild != -1) {
             return child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
+        }
+        */
+        if (childCount >= 1) {
+            int bestChild = findBestChildByUCB();
+            return child[bestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
         }
         if (board.winner != 2) { return false; } // winner decided / draw
         VII possibleMoves = board.getAllMoves();
