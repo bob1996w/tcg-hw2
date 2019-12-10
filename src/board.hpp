@@ -34,8 +34,9 @@ using namespace std;
 #define MAX_NODE 0
 #define MIN_NODE 1
 
-const double UCB_C = 1.18;      // exploration coefficient of UCB
-const double timerMaxAllow = 2; // max allow time in seconds
+//const double UCB_C = 1.18;      // exploration coefficient of UCB
+const double UCB_C = 1.18;
+const double timerMaxAllow = 6; // max allow time in seconds
 
 #define ABS(x) ((x > 0)? x : -x)
 
@@ -473,9 +474,11 @@ struct TreeNode {
     TreeNode* child[NEXT_MOVE_NUM];
     TreeNode* parent = nullptr;
     int childCount = 0;
-    int score = 0;              // in random trials, how many leads to win
+    int scoreWin = 0;           // in random trials, how many leads to win
+    int scoreDraw = 0;          // in random trials, how many leads to draw
+    int scoreLose = 0;          // in random trials, how many leads to lose
     int trial = 0;              // total trials tried for this node
-    double winRate = 0.0;       // = score / trial
+    double winRate = 0.0;       // = scoreWin / trial (MAX_NODE) or scoreLose / trial (MIN_NODE)
     double sqrtLogN = 0.0;      // sqrt(log(trial))
     bool nodeType = MAX_NODE;   // is this a MAX_NODE (0, player) or MIN_NODE (1, enemy)?
     int currentBestChild = -1;  // -1: not decided
@@ -514,14 +517,16 @@ struct TreeNode {
         return UCB_C * sqrtLogNTotal / sqrtLogN;
     }
 
+    // we have to manually calculate win rate here,
+    // because the winRate for each children is for enemies.
     int findBestWinRate () {
         if (childCount == 1) { return 0; }
         int winnerStep = 0;
-        double winnerRate = child[0]->winRate;
+        double winnerRate = (double)(child[0]->scoreWin) / child[0]->trial;
         for (int c = 1; c < childCount; ++c) {
-            if (child[c]->winRate > winnerRate) {
+            if ((double)(child[c]->scoreWin) / child[c]->trial > winnerRate) {
                 winnerStep = c;
-                winnerRate = child[c]->winRate;
+                winnerRate = (double)(child[c]->scoreWin) / child[c]->trial;
             }
         }
         return winnerStep;
@@ -532,26 +537,29 @@ struct TreeNode {
     }
 
     // called by child: parent->updateScoreFromChild
-    void updateScoreFromChild (int scoreAdded, int trialAdded) {
-        score += scoreAdded;
+    void updateScoreFromChild (int winAdded, int drawAdded, int loseAdded, int trialAdded) {
+        scoreWin += winAdded;
+        scoreDraw += drawAdded;
+        scoreLose += loseAdded;
         trial += trialAdded;
-        winRate = (double)score / trial;
+        if (nodeType == MAX_NODE) {
+            winRate = (double)scoreWin / trial;
+        }
+        else {
+            winRate = (double)scoreLose / trial;
+        }
         sqrtLogN = sqrt(log(trial));
         if (parent != nullptr) {
-            parent->updateScoreFromChild(scoreAdded, trialAdded);
+            //parent->updateScoreFromChild(scoreAdded, trialAdded);
+            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
             parent->updateBestChild();
         }
     }
 
-    // find maximum score in MAX_NODE, find minimum score in MIN_NODE
+    // find winRate to us in MAX_NODE, find winRate to enemy in MIN_NODE
     // if no child, return -1
     int findBestChildByUCB () {
-        if (nodeType == MAX_NODE) {
-            return findMaxChildByUCB();
-        }
-        else {
-            return findMinChildByUCB();
-        }
+        return findMaxChildByUCB();
     }
 
     int findMaxChildByUCB () {
@@ -604,34 +612,54 @@ struct TreeNode {
                 }
             }
             if (board.winner == ourPlayer) {
-                score += 1;
+                scoreWin += 1;
+            }
+            else if (board.winner == 3) {
+                scoreDraw += 1;
+            }
+            else {
+                scoreLose += 1;
             }
             board.resetBoard();
         }
         trial += numTrial;
-        winRate = (double)score / trial;
+        if (nodeType == MAX_NODE) {
+            winRate = (double)scoreWin / trial;
+        }
+        else {
+            winRate = (double)scoreLose / trial;
+        }
         sqrtLogN = sqrt(log(trial));
     }
 
     // return the best children
     void runRandomTrialForAllChildren (int numTrial, bool ourPlayer) {
-        int scoreAdded = 0, trialAdded = 0;
+        int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
         for (int c = 0; c < childCount; ++c) {
 #ifdef LOG
             //flog << "running child " << c << endl << flush;
 #endif
             child[c]->runRandomTrial(numTrial, ourPlayer);
-            trial += numTrial;
             trialAdded += numTrial;
-            score += child[c]->score;
-            scoreAdded += child[c]->score;
+            winAdded += child[c]->scoreWin;
+            drawAdded += child[c]->scoreDraw;
+            loseAdded += child[c]->scoreLose;
         }
+        trial += trialAdded;
+        scoreWin += winAdded;
+        scoreDraw += drawAdded;
+        scoreLose += loseAdded;
         // TODO: update winRate
-        winRate = (double)score / trial;
+        if (nodeType == MAX_NODE) {
+            winRate = (double)scoreWin / trial;
+        }
+        else {
+            winRate = (double)scoreLose / trial;
+        }
         // TODO: update sqrtLogN
         sqrtLogN = sqrt(log(trial));
         if (parent != nullptr) {
-            parent->updateScoreFromChild(scoreAdded, trialAdded);
+            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
         }
     }
 
@@ -674,7 +702,7 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode(&board, possibleMoves[c], this, !nodeType);
         }
-        runRandomTrialForAllChildren (300, ourPlayer);
+        runRandomTrialForAllChildren (1000, ourPlayer);
         updateBestChild();
         return true;
     }
@@ -690,6 +718,7 @@ struct TreeNode {
         }
         int bestMove = findBestWinRate();
 #ifdef LOG
+        flog << "board.turn = " << string((board.turn == RED)? "RED" : "BLUE") << endl << flush; 
         flog << printNode(0) << endl << flush;
 #endif
         return child[bestMove]->move;
@@ -702,7 +731,7 @@ struct TreeNode {
         }
         ret += "<" + to_string(move.first) + "," + to_string(move.second) + ">";
         ret += string((nodeType == MAX_NODE)? "+":"-") + " ";
-        ret += to_string(score) + "/" + to_string(trial);
+        ret += "w" + to_string(scoreWin) + " d" + to_string(scoreDraw) + " l" + to_string(scoreLose) + "/" + to_string(trial);
         ret += " " + to_string(winRate);
         ret += " best=" + to_string(currentBestChild);
         if (depth != 0) {
