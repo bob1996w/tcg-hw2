@@ -492,6 +492,8 @@ struct TreeNode {
     int sum1 = 0;               // = \Sigma x_i
     int sum2 = 0;               // = \Sigma X_i^2
     int pruned = false;         // is this node pruned in progressive pruning?
+    double mean = 0;
+    double stdev = 0;
 
     GameBoard board;
 
@@ -526,36 +528,24 @@ struct TreeNode {
         return UCB_C * sqrtLogNTotal / sqrtLogN;
     }
 
-    double average () {
-        return (double) sum1 / trial;
-    }
-
-    double variance () {
-        return  (double) (sum2 - 2 * average() * sum1) / trial + average() * average();
-    }
-
-    double stdev () {
-        return sqrt(variance());
-    }
-
     // isStatisticallyInferiorTo = this + node1.stdev < PP_SIGMA && node2.stdev < PP_SIGMA
     bool isStatisticallyInferiorTo (TreeNode *that) {
-        return average() + PP_RD * stdev() < that->average() - PP_RD * that->stdev();
+        return mean + PP_RD * stdev < that->mean- PP_RD * that->stdev;
     }
 
     // isStatisticallySuperiorTo = this + node1.stdev < PP_SIGMA && node2.stdev < PP_SIGMA
     bool isStatisticallySuperiorTo (TreeNode *that) {
-        return that->average() + PP_RD * that->stdev() < average() - PP_RD * stdev();
+        return that->mean + PP_RD * that->stdev < mean - PP_RD * stdev;
     }
 
     // we have to manually calculate win rate here,
     // because the winRate for each children is for enemies.
     int findBestWinRate () {
         if (childCount == 1) { return 0; }
-        int winnerStep = 0;
-        double winnerRate = (double)(child[0]->scoreWin) / child[0]->trial;
-        for (int c = 1; c < childCount; ++c) {
-            if ((double)(child[c]->scoreWin) / child[c]->trial > winnerRate) {
+        int winnerStep = -1;
+        double winnerRate = -10000 ;
+        for (int c = 0; c < childCount; ++c) {
+            if ((!child[c]->pruned) && (double)(child[c]->scoreWin) / child[c]->trial > winnerRate) {
                 winnerStep = c;
                 winnerRate = (double)(child[c]->scoreWin) / child[c]->trial;
             }
@@ -568,7 +558,7 @@ struct TreeNode {
     }
 
     // called by child: parent->updateScoreFromChild
-    void updateScoreFromChild (int winAdded, int drawAdded, int loseAdded, int trialAdded) {
+    void updateScoreFromChild (int winAdded, int drawAdded, int loseAdded, int trialAdded, bool skipPruning = false) {
         scoreWin += winAdded;
         scoreDraw += drawAdded;
         scoreLose += loseAdded;
@@ -581,6 +571,8 @@ struct TreeNode {
         }
         sum1 = scoreWin - scoreLose;
         sum2 = scoreWin + scoreLose;
+        mean = (double) sum1 / trial;
+        stdev = sqrt((double) (sum2 - 2 * mean * sum1) / trial + mean * mean);
         sqrtLogN = sqrt(log(trial));
         // updateBestChild();
         progressivePruningParentUpdate();
@@ -600,26 +592,10 @@ struct TreeNode {
         if (childCount == 0) { return -1; }
         else if (childCount == 1) { return 0; }
         else {
-            int bestChild = 0;
-            double bestScore = child[0]->UCBScore(sqrtLogN), s;
+            int bestChild = -1;
+            double bestScore = -10000, s;
             for (int i = 0; i < childCount; ++i) {
-                if ((s = child[i]->UCBScore(sqrtLogN)) > bestScore) {
-                    bestChild = i;
-                    bestScore = s;
-                }
-            }
-            return bestChild;
-        }
-    }
-
-    int findMinChildByUCB () {
-        if (childCount == 0) { return -1; }
-        else if (childCount == 1) { return 0; }
-        else {
-            int bestChild = 0;
-            double bestScore = child[0]->UCBScore(sqrtLogN), s;
-            for (int i = 0; i < childCount; ++i) {
-                if ((s = child[i]->UCBScore(sqrtLogN)) < bestScore) {
+                if ((!child[i]->pruned) && (s = child[i]->UCBScore(sqrtLogN)) > bestScore) {
                     bestChild = i;
                     bestScore = s;
                 }
@@ -630,7 +606,25 @@ struct TreeNode {
 
     // update the progressive pruning as parent
     void progressivePruningParentUpdate () {
+        if (childCount == 1) { return; }
         // TODO: how to update non-leaf pruning?
+        double largestLeftExpectedOutcome = -10000, temp;
+        for (int c = 0; c < childCount; ++c) {
+            if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
+                    child[c]->stdev < PP_SIGMA &&
+                    (temp = (child[c]->mean - PP_RD * child[c]->stdev)) > largestLeftExpectedOutcome) {
+                largestLeftExpectedOutcome = temp;
+            }
+        }
+
+        // prune child that is isStatisticallyInferiorTo largestLeftExpectedOutcome
+        for (int c = 0; c < childCount; ++c) {
+            if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
+                    child[c]->stdev < PP_SIGMA &&
+                    (temp = (child[c]->mean + PP_RD * child[c]->stdev)) < largestLeftExpectedOutcome) {
+                child[c]->pruned = true;
+            }
+        }
     }
 
     void runRandomTrial (int numTrial, bool ourPlayer) {
@@ -664,6 +658,8 @@ struct TreeNode {
         trial += numTrial;
         sum1 = scoreWin - scoreLose;
         sum2 = scoreWin + scoreLose;
+        mean = (double) sum1 / trial;
+        stdev = sqrt((double) (sum2 - 2 * mean * sum1) / trial + mean * mean);
         if (nodeType == MAX_NODE) {
             winRate = (double)scoreWin / trial;
         }
@@ -688,7 +684,7 @@ struct TreeNode {
                 if (currentChildTrial >= MIN_PRUNE_NUM_TRIAL) {
                     // try pruning child
                     for (int c2 = 0; c2 < c; ++c2) {
-                        if (child[c]->stdev() < PP_SIGMA && child[c2]->stdev() < PP_SIGMA &&
+                        if (child[c]->stdev < PP_SIGMA && child[c2]->stdev < PP_SIGMA &&
                                 child[c]->isStatisticallyInferiorTo(child[c2])) {
                             child[c]->pruned = true;
                             break;
@@ -702,7 +698,7 @@ struct TreeNode {
             drawAdded += child[c]->scoreDraw;
             loseAdded += child[c]->scoreLose;
         }
-        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true);
     }
 
     PII getRandomTrialScoreMove () {
@@ -785,7 +781,7 @@ struct TreeNode {
         if (depth != 0) {
             ret += " ue" + to_string(UCBExploreTerm(parent->sqrtLogN));
         }
-        ret += " mean" + to_string(average()) + " stdev" + to_string(stdev());
+        ret += " mean" + to_string(mean) + " stdev" + to_string(stdev);
         ret += "\n";
         for (int c = 0; c < childCount; ++c) {
             ret += child[c]->printNode(depth + 1);
