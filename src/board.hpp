@@ -377,6 +377,63 @@ struct _game_board {
         return make_pair(15, 15);
     }
 
+    // Only used for simulation.
+    // If we found a better move, return the move immediately.
+    // Otherwise, return (-1, -1).
+    PII getBetterMove() {
+        if (cubesLeft[turn] < 2) { return make_pair(-1, -1); }
+        int yy, xx, poss, yyy, xxx, posss;
+        PII pos;
+        for (int num = CUBE_NUM - 1; num >= 0; --num) {
+            if (cubes[turn][num].isOnBoard()) {
+                pos = findCube(turn, num);
+                Cube* currentCube = board[pos.first * BOARD_WIDTH + pos.second].c;
+                for (int dir = 0; dir < 3; ++dir) {
+                    yy = pos.first + dy[turn][dir];
+                    xx = pos.second + dx[turn][dir];
+                    poss = yy * BOARD_WIDTH + xx;
+                    if (isOut(yy, xx)) { continue; }
+                    /*
+                        O is the player (assume currently red), current turn
+                        X is the enemy (assume current blue)
+                        
+                        rule 1: (dir = 1, ->)
+                        
+                        .OXX   abc
+                        . X     ed
+                        If we (a) go right, we can eat (b), 
+                        and then probably eaten by (c, d, e).
+                        O should be large, and X's should be small.
+                    */
+                    // Does b exist?
+                    Cube* target = board[poss].c;
+                    // compare color and size of cube's num
+                    if (target != nullptr && ABS(target->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                        bool better = true;
+                        // Does c,d,e exist?
+                        for (int k = 0; k < 3; ++k) {
+                            yyy = yy + dy[turn][k];
+                            xxx = xx + dx[turn][k];
+                            posss = yyy * BOARD_WIDTH + xxx;
+                            if (isOut(yyy, xxx)) { continue; }
+                            Cube* trap = board[posss].c;
+                            if (trap != nullptr && 
+                                    ABS(target->cubeNumber) > ABS(num) &&
+                                    ABS(trap->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                                better = false;
+                                break;
+                            }
+                        }
+                        if (better) {
+                            return make_pair(num, dir);
+                        }
+                    }
+                }
+            }
+        }
+        return make_pair(-1, -1);
+    }
+
     string sendMove(PII move) {
         string send;
         send += (char)(move.first + '0');
@@ -664,10 +721,25 @@ struct TreeNode {
     }
 
     void runRandomTrial (int numTrial, bool ourPlayer) {
+        pair<int, int> move;
         for (int t = 0; t < numTrial; ++t) {
             int turns = 0;
             while (board.winner == 2) {
-                pair<int, int> move = board.getRandomMove();
+#ifdef RULE
+    #ifdef LOG
+                //cerr << "running betterMove" << endl << flush;
+    #endif
+                move = board.getBetterMove();
+    #ifdef LOG
+                //cerr << "end betterMove" << endl << flush;
+                //cerr << move.first << " " << move.second << endl << flush;
+    #endif
+                if (move.first == -1) {
+                    move = board.getRandomMove();
+                }
+#else
+                move = board.getRandomMove();
+#endif
                 board.applyMove(move);
 #ifdef LOG
                 // flog << t << " " << board.winner << endl;
