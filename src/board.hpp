@@ -530,12 +530,28 @@ struct TreeNode {
 
     // isStatisticallyInferiorTo = this + node1.stdev < PP_SIGMA && node2.stdev < PP_SIGMA
     bool isStatisticallyInferiorTo (TreeNode *that) {
-        return mean + PP_RD * stdev < that->mean- PP_RD * that->stdev;
+#ifdef LOG
+        // flog << "inferior " << nodeType << " " << rightExpectedOutcome() << " " << that->nodeType << " " << that->leftExpectedOutcome() << endl;
+#endif
+        return rightExpectedOutcome() < that->leftExpectedOutcome();
     }
 
-    // isStatisticallySuperiorTo = this + node1.stdev < PP_SIGMA && node2.stdev < PP_SIGMA
-    bool isStatisticallySuperiorTo (TreeNode *that) {
-        return that->mean + PP_RD * that->stdev < mean - PP_RD * stdev;
+    double rightExpectedOutcome () {
+        if (nodeType == MAX_NODE) {
+            return mean + PP_RD * stdev;
+        }
+        else {
+            return -mean + PP_RD * stdev;
+        }
+    }
+
+    double leftExpectedOutcome () {
+        if (nodeType == MAX_NODE) {
+            return mean - PP_RD * stdev;
+        }
+        else {
+            return -mean - PP_RD * stdev;
+        }
     }
 
     // we have to manually calculate win rate here,
@@ -544,11 +560,21 @@ struct TreeNode {
         if (childCount == 1) { return 0; }
         int winnerStep = -1;
         double winnerRate = -10000 ;
+        //double leastWinnerRate = 10000;
         for (int c = 0; c < childCount; ++c) {
+            // calculate by win rate
             if ((!child[c]->pruned) && (double)(child[c]->scoreWin) / child[c]->trial > winnerRate) {
                 winnerStep = c;
                 winnerRate = (double)(child[c]->scoreWin) / child[c]->trial;
             }
+
+            // calculate by enemy's least winRate
+            /*
+            if ((!child[c]->pruned) && child[c]->winRate < leastWinnerRate) {
+                winnerStep = c;
+                leastWinnerRate = child[c]->winRate;
+            }
+            */
         }
         return winnerStep;
     }
@@ -612,19 +638,26 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
                     child[c]->stdev < PP_SIGMA &&
-                    (temp = (child[c]->mean - PP_RD * child[c]->stdev)) > largestLeftExpectedOutcome) {
+                    (temp = (child[c]->leftExpectedOutcome())) > largestLeftExpectedOutcome) {
                 largestLeftExpectedOutcome = temp;
             }
         }
+#ifdef LOG
+        // flog << "pp_parent " << nodeType << " " << largestLeftExpectedOutcome << endl;
+#endif
 
         // prune child that is isStatisticallyInferiorTo largestLeftExpectedOutcome
         for (int c = 0; c < childCount; ++c) {
             if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
                     child[c]->stdev < PP_SIGMA &&
-                    (temp = (child[c]->mean + PP_RD * child[c]->stdev)) < largestLeftExpectedOutcome) {
+                    (temp = (child[c]->rightExpectedOutcome())) < largestLeftExpectedOutcome) {
+#ifdef LOG
+                // flog <<"pruned " << c << " " << child[c]->rightExpectedOutcome() << endl;
+#endif
                 child[c]->pruned = true;
             }
         }
+        
     }
 
     void runRandomTrial (int numTrial, bool ourPlayer) {
@@ -732,8 +765,8 @@ struct TreeNode {
         }
         */
         if (childCount >= 1) {
-            int bestChild = findBestChildByUCB();
-            return child[bestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
+            currentBestChild = findBestChildByUCB();
+            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
         }
         if (board.winner != 2) { return false; } // winner decided / draw
         VII possibleMoves = board.getAllMoves();
@@ -747,7 +780,7 @@ struct TreeNode {
             child[c] = new TreeNode(&board, possibleMoves[c], this, !nodeType);
         }
         runRandomTrialForAllChildren (1000, ourPlayer);
-        updateBestChild();
+        // updateBestChild();
         return true;
     }
 
@@ -758,7 +791,7 @@ struct TreeNode {
                 < timerMaxAllow) {
             if (!pvSearchWithUCB (board.turn, 100)) { break; }
             if (childCount == 1) { break; }
-            updateBestChild();
+            // updateBestChild();
         }
         int bestMove = findBestWinRate();
 #ifdef LOG
