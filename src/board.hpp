@@ -615,17 +615,20 @@ struct TreeNode {
     }
 
     int findMaxChildByUCB () {
+        // reverse winRate in child
+        // because the winRate for child is the opposite for current parent.
         if (childCount == 0) { return -1; }
         else if (childCount == 1) { return 0; }
         else {
             int bestChild = -1;
             double bestScore = -10000, s;
             for (int i = 0; i < childCount; ++i) {
-                if ((!child[i]->pruned) && (s = child[i]->UCBScore(sqrtLogN)) > bestScore) {
+                if ((!child[i]->pruned) && (s = -(child[i]->winRate) + child[i]->UCBExploreTerm(sqrtLogN)) > bestScore) {
                     bestChild = i;
                     bestScore = s;
                 }
             }
+            // cerr << "bestChild " << nodeType << " " << bestChild << " " << bestScore << " : " << child[bestChild]->winRate << " " << child[bestChild]->UCBExploreTerm(sqrtLogN) << endl;
             return bestChild;
         }
     }
@@ -705,7 +708,7 @@ struct TreeNode {
     // return the best children
     void runRandomTrialForAllChildren (int numTrial, bool ourPlayer) {
         int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
-        int batchNumTrial = numTrial / 100, currentChildTrial = 0;
+        int batchNumTrial = numTrial / 10, currentChildTrial = 0;
         for (int c = 0; c < childCount; ++c) {
 #ifdef LOG
             //flog << "running child " << c << endl << flush;
