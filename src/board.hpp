@@ -539,7 +539,7 @@ struct TreeNode {
     int scoreDraw = 0;          // in random trials, how many leads to draw
     int scoreLose = 0;          // in random trials, how many leads to lose
     int trial = 0;              // total trials tried for this node
-    double winRate = 0.0;       // = scoreWin / trial (MAX_NODE) or scoreLose / trial (MIN_NODE)
+    double winRate = 0.0;       // = scoreWin / trial (parent = MAX_NODE) or scoreLose / trial (parent = MIN_NODE)
     double sqrtLogN = 0.0;      // sqrt(log(trial))
     bool nodeType = MAX_NODE;   // is this a MAX_NODE (0, player) or MIN_NODE (1, enemy)?
     int currentBestChild = -1;  // -1: not decided
@@ -611,8 +611,7 @@ struct TreeNode {
         }
     }
 
-    // we have to manually calculate win rate here,
-    // because the winRate for each children is for enemies.
+    // winRate now contains same winRate as parents
     int findBestWinRate () {
         if (childCount == 1) { return 0; }
         int winnerStep = -1;
@@ -620,7 +619,7 @@ struct TreeNode {
         //double leastWinnerRate = 10000;
         for (int c = 0; c < childCount; ++c) {
             // calculate by win rate
-            if ((!child[c]->pruned) && (double)(child[c]->scoreWin) / child[c]->trial > winnerRate) {
+            if (!(child[c]->pruned) && (double)(child[c]->scoreWin) / child[c]->trial > winnerRate) {
                 winnerStep = c;
                 winnerRate = (double)(child[c]->scoreWin) / child[c]->trial;
             }
@@ -646,7 +645,7 @@ struct TreeNode {
         scoreDraw += drawAdded;
         scoreLose += loseAdded;
         trial += trialAdded;
-        if (nodeType == MAX_NODE) {
+        if (nodeType != MAX_NODE) { // parent node has different node type than this
             winRate = (double)scoreWin / trial;
         }
         else {
@@ -682,7 +681,7 @@ struct TreeNode {
             int bestChild = -1;
             double bestScore = -10000, s;
             for (int i = 0; i < childCount; ++i) {
-                if ((!child[i]->pruned) && (s = -(child[i]->winRate) + child[i]->UCBExploreTerm(sqrtLogN)) > bestScore) {
+                if (!(child[i]->pruned) && (s = child[i]->winRate + child[i]->UCBExploreTerm(sqrtLogN)) > bestScore) {
                     bestChild = i;
                     bestScore = s;
                 }
@@ -770,7 +769,7 @@ struct TreeNode {
         sum2 = scoreWin + scoreLose;
         mean = (double) sum1 / trial;
         stdev = sqrt((double) (sum2 - 2 * mean * sum1) / trial + mean * mean);
-        if (nodeType == MAX_NODE) {
+        if (parent->nodeType == MAX_NODE) {
             winRate = (double)scoreWin / trial;
         }
         else {
