@@ -47,7 +47,8 @@ const int MIN_PRUNE_NUM_TRIAL = 300;
 
 extern fstream flog; // agent.cpp
 static mt19937_64 randomEngine(random_device{}());
-int getUniformIntRandFixedSize(int); 
+int getUniformIntRandFixedSize(int);
+int maxPVDepth = 0;
 
 const int RANDOM_DIR[6][3] = {
     {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}
@@ -835,6 +836,15 @@ struct TreeNode {
 
     // return false if should stop searching, true otherwise
     bool pvSearchWithUCB (bool ourPlayer, int depth) {
+        if (depth > maxPVDepth) {
+            maxPVDepth = depth;
+#ifdef LOG
+            cerr << "Max PV Depth " << maxPVDepth << endl;
+            flog << "Max PV Depth " << maxPVDepth << endl;
+#endif
+        }
+
+
         if (depth >= MAX_PV_DEPTH) { return false; }
         /*
         if (currentBestChild != -1) {
@@ -875,6 +885,7 @@ struct TreeNode {
     PII getMonteCarloBasicMove () {
         double timerElapsed;
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
+        maxPVDepth = 0;
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
             if (!pvSearchWithUCB (board.turn, 0)) { break; }
