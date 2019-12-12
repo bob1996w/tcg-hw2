@@ -48,7 +48,9 @@ const int MIN_PRUNE_NUM_TRIAL = 300;
 extern fstream flog; // agent.cpp
 static mt19937_64 randomEngine(random_device{}());
 int getUniformIntRandFixedSize(int);
+
 int maxPVDepth = 0;
+int minSteps = 10000;
 
 const int RANDOM_DIR[6][3] = {
     {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}
@@ -189,6 +191,8 @@ struct _game_board {
     Cube cubes[PLAYER_NUM][CUBE_NUM];
     int initialWinner = 2;
     int winner = 2; // 0 = RED, 1 = BLUE, 2 = not decided, 3 = draw
+    int steps = 0; // how many steps since game start
+    int initialSteps = 0;
 
     void setBoardAs (_game_board* b) {
         for (int p = 0; p < 2; ++p) {
@@ -202,6 +206,8 @@ struct _game_board {
         turn = b->turn;
         initialWinner = b->initialWinner;
         winner = b->winner;
+        steps = b->steps;
+        initialSteps = b->initialSteps;
         // reverseCopyCube();
         setCurrentAsInitial();
         resetBoard();
@@ -221,6 +227,8 @@ struct _game_board {
         initialTurn = b->turn;
         initialWinner = b->initialWinner;
         winner = b->winner;
+        steps = b->steps;
+        initialSteps = b->initialSteps;
         resetBoard();
         applyMove(initialMove);
         setCurrentAsInitial();
@@ -258,6 +266,7 @@ struct _game_board {
         initialWinner = winner;
         initialCubesLeft[0] = cubesLeft[0];
         initialCubesLeft[1] = cubesLeft[1];
+        initialSteps = steps;
         reverseCopyCube();
     }
 
@@ -279,6 +288,7 @@ struct _game_board {
         winner = initialWinner;
         cubesLeft[0] = initialCubesLeft[0];
         cubesLeft[1] = initialCubesLeft[1];
+        steps = initialSteps;
     }
 
     bool isOut (int y, int x) {
@@ -289,7 +299,7 @@ struct _game_board {
         return board[y * BOARD_WIDTH + x].hasCube();
     }
 
-    void nextTurn () { turn = !turn; }
+    void nextTurn () { turn = !turn; steps += 1; }
 
     // return (-100, -100) if not found
     PII findCube (int color, int num) {
@@ -764,6 +774,12 @@ struct TreeNode {
             else {
                 scoreLose += 1;
             }
+#ifdef LOG
+            if (board.steps < minSteps) {
+                minSteps = board.steps;
+                cerr << "minSteps " << minSteps << endl << flush;
+            }
+#endif
             board.resetBoard();
         }
         trial += numTrial;
@@ -886,6 +902,7 @@ struct TreeNode {
         double timerElapsed;
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         maxPVDepth = 0;
+        minSteps = 10000;
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
             if (!pvSearchWithUCB (board.turn, 0)) { break; }
