@@ -42,7 +42,7 @@ const double PP_RD = 1;
 const double PP_SIGMA = 2;
 const int MIN_PRUNE_NUM_TRIAL = 300;
 
-#define ABS(x) ((x > 0)? x : -x)
+#define ABS(x) (((x) > 0)? (x) : -(x))
 
 extern fstream flog; // agent.cpp
 static mt19937_64 randomEngine(random_device{}());
@@ -381,7 +381,7 @@ struct _game_board {
     // If we found a better move, return the move immediately.
     // Otherwise, return (-1, -1).
     PII getBetterMove() {
-        if (cubesLeft[turn] < 2) { return make_pair(-1, -1); }
+        if (cubesLeft[turn] <= 2) { return make_pair(-1, -1); }
         int yy, xx, poss, yyy, xxx, posss;
         PII pos;
         for (int num = CUBE_NUM - 1; num >= 0; --num) {
@@ -418,7 +418,7 @@ struct _game_board {
                             if (isOut(yyy, xxx)) { continue; }
                             Cube* trap = board[posss].c;
                             if (trap != nullptr && 
-                                    ABS(target->cubeNumber) > ABS(num) &&
+                                    ABS(target->cubeNumber) > ABS(currentCube->cubeNumber) &&
                                     ABS(trap->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
                                 better = false;
                                 break;
