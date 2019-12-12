@@ -663,7 +663,7 @@ struct TreeNode {
         }
         if (parent != nullptr) {
             //parent->updateScoreFromChild(scoreAdded, trialAdded);
-            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
+            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true);
         }
     }
 
