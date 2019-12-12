@@ -11,6 +11,8 @@ all: src/agent.cpp src/board.hpp src/agentRT.cpp
 	$(CPLUSPLUS) -D LOG src/agentMCTBasic.cpp -o target/agentMCTBasic-log -g
 	$(CPLUSPLUS) src/agentMCTRule.cpp -o target/agentMCTRule
 	$(CPLUSPLUS) -D LOG src/agentMCTRule.cpp -o target/agentMCTRule-log -g
+	$(CPLUSPLUS) src/agentMCTUneven.cpp -o target/agentMCTUneven
+	$(CPLUSPLUS) -D LOG src/agentMCTUneven.cpp -o target/agentMCTUneven-log -g
 	$(DEL) *.o
 
 testRandom: src/testRandom.cpp

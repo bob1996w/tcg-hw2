@@ -446,6 +446,49 @@ struct _game_board {
         return make_pair(-1, -1);
     }
 
+    // return all of the better moves
+    // if none, return empty vector
+    VII getBetterMoves () {
+        VII returnValues = vector<PII>();
+        if (cubesLeft[turn] <= 2) { return returnValues; }
+        int yy, xx, poss, yyy, xxx, posss;
+        PII pos;
+        for (int num = CUBE_NUM - 1; num >= 0; --num) {
+            if (cubes[turn][num].isOnBoard()) {
+                pos = findCube(turn, num);
+                Cube* currentCube = board[pos.first * BOARD_WIDTH + pos.second].c;
+                for (int dir = 0; dir < 3; ++dir) {
+                    yy = pos.first + dy[turn][dir];
+                    xx = pos.second + dx[turn][dir];
+                    poss = yy * BOARD_WIDTH + xx;
+                    if (isOut(yy, xx)) { continue; }
+                    Cube* target = board[poss].c;
+                    if (target != nullptr && ABS(target->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                        bool better = true;
+                        // Does c,d,e exist?
+                        for (int k = 0; k < 3; ++k) {
+                            yyy = yy + dy[turn][k];
+                            xxx = xx + dx[turn][k];
+                            posss = yyy * BOARD_WIDTH + xxx;
+                            if (isOut(yyy, xxx)) { continue; }
+                            Cube* trap = board[posss].c;
+                            if (trap != nullptr && 
+                                    ABS(target->cubeNumber) > ABS(currentCube->cubeNumber) &&
+                                    ABS(trap->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                                better = false;
+                                break;
+                            }
+                        }
+                        if (better) {
+                            returnValues.emplace_back(num, dir);
+                        }
+                    }
+                }
+            }
+        }
+        return returnValues;
+    }
+
     string sendMove(PII move) {
         string send;
         send += (char)(move.first + '0');
@@ -828,6 +871,29 @@ struct TreeNode {
         updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true);
     }
 
+    // run uneven trials for each children
+    void runUnevenTrialsForAllChildren(int leastTrial, bool ourPlayer) {
+        VII betterMoves = board.getBetterMoves();
+        int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
+        for (int c = 0; c < childCount; ++c) {
+            int currentChildTrial = leastTrial;
+            // is this move a betterMove?
+            VII::iterator findResult = find(betterMoves.begin(), betterMoves.end(), child[c]->move);
+            if (findResult != betterMoves.end()) {
+#ifdef LOG
+                //cerr << "isBetterMove" << endl;
+#endif
+                currentChildTrial *= 2;
+            }
+            child[c]->runRandomTrial(currentChildTrial, ourPlayer);
+            trialAdded += currentChildTrial;
+            winAdded += child[c]->scoreWin;
+            drawAdded += child[c]->scoreDraw;
+            loseAdded += child[c]->scoreLose;
+        }
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true);
+    }
+
     PII getRandomTrialScoreMove () {
         bool ourPlayer = board.turn;
         VII possibleMoves = board.getAllMoves();
@@ -851,7 +917,7 @@ struct TreeNode {
     }
 
     // return false if should stop searching, true otherwise
-    bool pvSearchWithUCB (bool ourPlayer, int depth) {
+    bool pvSearchWithUCB (bool ourPlayer, int depth, bool isEvenlyRandom = true) {
         if (depth > maxPVDepth) {
             maxPVDepth = depth;
 #ifdef LOG
@@ -869,19 +935,11 @@ struct TreeNode {
         */
         if (childCount >= 1) {
             currentBestChild = findBestChildByUCB();
-            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, depth + 1);
+            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, depth + 1, isEvenlyRandom);
         }
         if (board.winner != 2) {
-#ifdef LOG
-            //flog << "PV depth " + to_string(depth) + " board winner decided" << endl << flush;
-            //cerr << "PV depth " + to_string(depth) + " board winner decided" << endl << flush;
-#endif
             return false;
         } // winner decided / draw
-#ifdef LOG
-        //flog << "PV depth " + to_string(depth) + " board search possible Moves" << endl << flush;
-        //cerr << "PV depth " + to_string(depth) + " board search possible Moves" << endl << flush;
-#endif
         
         VII possibleMoves = board.getAllMoves();
         childCount = possibleMoves.size();
@@ -893,19 +951,24 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode(&board, possibleMoves[c], this, !nodeType);
         }
-        runRandomTrialForAllChildren (300, ourPlayer);
+        if (isEvenlyRandom) {
+            runRandomTrialForAllChildren (500, ourPlayer);
+        }
+        else {
+            runUnevenTrialsForAllChildren(350, ourPlayer);
+        }
         // updateBestChild();
         return true;
     }
 
-    PII getMonteCarloBasicMove () {
+    PII getMonteCarloBasicMove (bool isEvenlyRandom = true) {
         double timerElapsed;
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         maxPVDepth = 0;
         minSteps = 10000;
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
-            if (!pvSearchWithUCB (board.turn, 0)) { break; }
+            if (!pvSearchWithUCB (board.turn, 0, isEvenlyRandom)) { break; }
             if (childCount == 1) { break; }
             // updateBestChild();
         }
