@@ -658,7 +658,9 @@ struct TreeNode {
         stdev = sqrt((double) (sum2 - 2 * mean * sum1) / trial + mean * mean);
         sqrtLogN = sqrt(log(trial));
         // updateBestChild();
-        progressivePruningParentUpdate();
+        if (!skipPruning) {
+            progressivePruningParentUpdate();
+        }
         if (parent != nullptr) {
             //parent->updateScoreFromChild(scoreAdded, trialAdded);
             parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded);
@@ -801,7 +803,7 @@ struct TreeNode {
                 }
                 if (child[c]->pruned) { break; }
             }
-            trialAdded += numTrial;
+            trialAdded += currentChildTrial;
             winAdded += child[c]->scoreWin;
             drawAdded += child[c]->scoreDraw;
             loseAdded += child[c]->scoreLose;
