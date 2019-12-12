@@ -37,6 +37,7 @@ using namespace std;
 //const double UCB_C = 1.18;      // exploration coefficient of UCB
 const double UCB_C = 1.18;
 const double timerMaxAllow = 6; // max allow time in seconds
+#define MAX_PV_DEPTH 100
 
 const double PP_RD = 1;
 const double PP_SIGMA = 2;
@@ -833,8 +834,8 @@ struct TreeNode {
     }
 
     // return false if should stop searching, true otherwise
-    bool pvSearchWithUCB (bool ourPlayer, int maxDepth) {
-        if (maxDepth <= 0) { return false; }
+    bool pvSearchWithUCB (bool ourPlayer, int depth) {
+        if (depth >= MAX_PV_DEPTH) { return false; }
         /*
         if (currentBestChild != -1) {
             return child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
@@ -842,9 +843,20 @@ struct TreeNode {
         */
         if (childCount >= 1) {
             currentBestChild = findBestChildByUCB();
-            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, maxDepth - 1);
+            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, depth + 1);
         }
-        if (board.winner != 2) { return false; } // winner decided / draw
+        if (board.winner != 2) {
+#ifdef LOG
+            //flog << "PV depth " + to_string(depth) + " board winner decided" << endl << flush;
+            //cerr << "PV depth " + to_string(depth) + " board winner decided" << endl << flush;
+#endif
+            return false;
+        } // winner decided / draw
+#ifdef LOG
+        //flog << "PV depth " + to_string(depth) + " board search possible Moves" << endl << flush;
+        //cerr << "PV depth " + to_string(depth) + " board search possible Moves" << endl << flush;
+#endif
+        
         VII possibleMoves = board.getAllMoves();
         childCount = possibleMoves.size();
         if (childCount == 1) {
@@ -855,7 +867,7 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode(&board, possibleMoves[c], this, !nodeType);
         }
-        runRandomTrialForAllChildren (1000, ourPlayer);
+        runRandomTrialForAllChildren (300, ourPlayer);
         // updateBestChild();
         return true;
     }
@@ -865,7 +877,7 @@ struct TreeNode {
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
-            if (!pvSearchWithUCB (board.turn, 100)) { break; }
+            if (!pvSearchWithUCB (board.turn, 0)) { break; }
             if (childCount == 1) { break; }
             // updateBestChild();
         }
