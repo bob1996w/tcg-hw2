@@ -600,9 +600,11 @@ struct TreeNode {
     int currentBestChild = -1;  // -1: not decided
     PII move;                   // the move from its parent.
 
-    // statistics: for each simulation, 1 = win, 0 = draw, -1 = lose
-    int sum1 = 0;               // = \Sigma x_i
-    int sum2 = 0;               // = \Sigma X_i^2
+    // statistics: for each simulation,
+    // old: 1 = win, 0 = draw, -1 = lose
+    // new: 1/sqrt(board.steps) * ((winner == ourPlayer)? 1: -1);
+    double sum1 = 0;               // = \Sigma x_i
+    double sum2 = 0;               // = \Sigma X_i^2
     int pruned = false;         // is this node pruned in progressive pruning?
     double mean = 0;
     double stdev = 0;
@@ -695,7 +697,8 @@ struct TreeNode {
     }
 
     // called by child: parent->updateScoreFromChild
-    void updateScoreFromChild (int winAdded, int drawAdded, int loseAdded, int trialAdded, bool skipPruning = false) {
+    void updateScoreFromChild (int winAdded, int drawAdded, int loseAdded, int trialAdded, 
+            bool skipPruning = false, int pruneScoreUpdate = 0, double sum1Added = 0, double sum2Added = 0) {
         scoreWin += winAdded;
         scoreDraw += drawAdded;
         scoreLose += loseAdded;
@@ -706,8 +709,15 @@ struct TreeNode {
         else {
             winRate = (double)scoreLose / trial;
         }
-        sum1 = scoreWin - scoreLose;
-        sum2 = scoreWin + scoreLose;
+        if (pruneScoreUpdate == 0) {
+            sum1 = scoreWin - scoreLose;
+            sum2 = scoreWin + scoreLose;
+        }
+        else if (pruneScoreUpdate == 1) {
+            sum1 += sum1Added;
+            sum2 += sum2Added;
+            // cerr << "updateScoreFromChild" << sum1Added << " " << sum2Added << endl << flush;
+        }
         mean = (double) sum1 / trial;
         stdev = sqrt((double) (sum2 - 2 * mean * sum1) / trial + mean * mean);
         sqrtLogN = sqrt(log(trial));
@@ -717,7 +727,8 @@ struct TreeNode {
         }
         if (parent != nullptr) {
             //parent->updateScoreFromChild(scoreAdded, trialAdded);
-            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true);
+            parent->updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true,
+                pruneScoreUpdate, sum1Added, sum2Added);
         }
     }
 
@@ -769,6 +780,7 @@ struct TreeNode {
                     (temp = (child[c]->rightExpectedOutcome())) < largestLeftExpectedOutcome) {
 #ifdef LOG
                 // flog <<"pruned " << c << " " << child[c]->rightExpectedOutcome() << endl;
+                // cerr << "pruned" << endl;
 #endif
                 child[c]->pruned = true;
             }
@@ -776,8 +788,12 @@ struct TreeNode {
         
     }
 
-    void runRandomTrial (int numTrial, bool ourPlayer) {
+    // pruneScoreUpdate: the method of updating the prune score
+    // 0: normal (+1 win, 0 draw, -1 lose)
+    // 1: 1/sqrt(board.steps) * (+1 win, 0 draw, -1 lose) when winner is decided
+    void runRandomTrial (int numTrial, bool ourPlayer, int pruneScoreUpdate = 0) {
         pair<int, int> move;
+        double tempSum1 = 0, tempSum2 = 0, tempX;
         for (int t = 0; t < numTrial; ++t) {
             int turns = 0;
             while (board.winner == 2) {
@@ -810,24 +826,40 @@ struct TreeNode {
             }
             if (board.winner == ourPlayer) {
                 scoreWin += 1;
+                if (pruneScoreUpdate == 1) {
+                    tempX = 1.0 / sqrt(board.steps);
+                    tempSum1 += tempX;
+                    tempSum2 += tempX * tempX;
+                }
             }
             else if (board.winner == 3) {
                 scoreDraw += 1;
             }
             else {
                 scoreLose += 1;
+                if (pruneScoreUpdate == 1) {
+                    tempX = -1.0 / sqrt(board.steps);
+                    tempSum1 += tempX;
+                    tempSum2 += tempX * tempX;
+                }
             }
 #ifdef LOG
             if (board.steps < minSteps) {
                 minSteps = board.steps;
-                cerr << "minSteps " << minSteps << endl << flush;
+                //cerr << "minSteps " << minSteps << endl << flush;
             }
 #endif
             board.resetBoard();
         }
         trial += numTrial;
-        sum1 = scoreWin - scoreLose;
-        sum2 = scoreWin + scoreLose;
+        if (pruneScoreUpdate == 0) {
+            sum1 = scoreWin - scoreLose;
+            sum2 = scoreWin + scoreLose;
+        }
+        else if (pruneScoreUpdate == 1) {
+            sum1 = tempSum1;
+            sum2 = tempSum2;
+        }
         mean = (double) sum1 / trial;
         stdev = sqrt((double) (sum2 - 2 * mean * sum1) / trial + mean * mean);
         if (parent->nodeType == MAX_NODE) {
@@ -872,9 +904,10 @@ struct TreeNode {
     }
 
     // run uneven trials for each children
-    void runUnevenTrialsForAllChildren(int leastTrial, bool ourPlayer) {
+    void runUnevenTrialsForAllChildren(int leastTrial, bool ourPlayer, int pruneScoreUpdate) {
         VII betterMoves = board.getBetterMoves();
         int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
+        double sum1Added = 0, sum2Added = 0;
         for (int c = 0; c < childCount; ++c) {
             int currentChildTrial = leastTrial;
             // is this move a betterMove?
@@ -885,13 +918,19 @@ struct TreeNode {
 #endif
                 currentChildTrial *= 2;
             }
-            child[c]->runRandomTrial(currentChildTrial, ourPlayer);
+            child[c]->runRandomTrial(currentChildTrial, ourPlayer, 1);
             trialAdded += currentChildTrial;
             winAdded += child[c]->scoreWin;
             drawAdded += child[c]->scoreDraw;
             loseAdded += child[c]->scoreLose;
+            if (pruneScoreUpdate == 1) {
+                // cerr << "runUnEven" << child[c]->sum1 << " " << child[c]->sum2 << endl;
+                sum1Added += child[c] -> sum1;
+                sum2Added += child[c] -> sum2;
+            }
         }
-        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true);
+        // cerr << "runUneven " << sum1Added << " " << sum2Added << endl;
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, false, pruneScoreUpdate, sum1Added, sum2Added);
     }
 
     PII getRandomTrialScoreMove () {
@@ -917,12 +956,15 @@ struct TreeNode {
     }
 
     // return false if should stop searching, true otherwise
-    bool pvSearchWithUCB (bool ourPlayer, int depth, bool isEvenlyRandom = true) {
+    bool pvSearchWithUCB (bool ourPlayer, int depth, bool isEvenlyRandom = true, int pruneScoreUpdate = 0) {
         if (depth > maxPVDepth) {
             maxPVDepth = depth;
 #ifdef LOG
-            cerr << "Max PV Depth " << maxPVDepth << endl;
-            flog << "Max PV Depth " << maxPVDepth << endl;
+            TreeNode* n = parent;
+            while (n->parent != nullptr) { n = n->parent; }
+            int nodeCount = n->numNode();
+            cerr << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
+            flog << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
 #endif
         }
 
@@ -955,20 +997,20 @@ struct TreeNode {
             runRandomTrialForAllChildren (500, ourPlayer);
         }
         else {
-            runUnevenTrialsForAllChildren(350, ourPlayer);
+            runUnevenTrialsForAllChildren(350, ourPlayer, pruneScoreUpdate);
         }
         // updateBestChild();
         return true;
     }
 
-    PII getMonteCarloBasicMove (bool isEvenlyRandom = true) {
+    PII getMonteCarloBasicMove (bool isEvenlyRandom = true, int pruneScoreUpdate = 0) {
         double timerElapsed;
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         maxPVDepth = 0;
         minSteps = 10000;
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
-            if (!pvSearchWithUCB (board.turn, 0, isEvenlyRandom)) { break; }
+            if (!pvSearchWithUCB (board.turn, 0, isEvenlyRandom, pruneScoreUpdate)) { break; }
             if (childCount == 1) { break; }
             // updateBestChild();
         }
@@ -1001,6 +1043,13 @@ struct TreeNode {
         return ret;
     }
 
+    int numNode () {
+        int currentNodeCount = 0;
+        for (int c = 0; c < childCount; ++c) {
+            currentNodeCount += child[c] -> numNode();
+        }
+        return currentNodeCount + 1;
+    }
 };
 
 #endif
