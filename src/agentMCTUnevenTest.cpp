@@ -1,3 +1,4 @@
+// this code does not prune. just test.
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>

@@ -52,6 +52,8 @@ int getUniformIntRandFixedSize(int);
 int maxPVDepth = 0;
 int minSteps = 10000;
 
+bool currentOurPlayer = RED;
+
 const int RANDOM_DIR[6][3] = {
     {0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}
 };
@@ -759,37 +761,49 @@ struct TreeNode {
     void progressivePruningParentUpdate () {
         if (childCount == 1) { return; }
         // TODO: how to update non-leaf pruning?
-        double largestLeftExpectedOutcome = -10000, temp;
-        for (int c = 0; c < childCount; ++c) {
-            if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
-                    child[c]->stdev < PP_SIGMA &&
-                    (temp = (child[c]->leftExpectedOutcome())) > largestLeftExpectedOutcome) {
-                largestLeftExpectedOutcome = temp;
+        if (nodeType == currentOurPlayer) {
+            double largestLeftExpectedOutcome = -10000, temp;
+            for (int c = 0; c < childCount; ++c) {
+                if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
+                        child[c]->stdev < PP_SIGMA &&
+                        (temp = (child[c]->leftExpectedOutcome())) > largestLeftExpectedOutcome) {
+                    largestLeftExpectedOutcome = temp;
+                }
+            }
+            // prune child that is isStatisticallyInferiorTo largestLeftExpectedOutcome
+            for (int c = 0; c < childCount; ++c) {
+                if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
+                        child[c]->stdev < PP_SIGMA &&
+                        (temp = (child[c]->rightExpectedOutcome())) < largestLeftExpectedOutcome) {
+                    child[c]->pruned = true;
+                }
             }
         }
-#ifdef LOG
-        // flog << "pp_parent " << nodeType << " " << largestLeftExpectedOutcome << endl;
-#endif
+        else {
+            // if MIN_NODE, we want to prune the child with the highest score.
+            double smallestRightExpectedOutcome = 10000, temp;
+            for (int c = 0; c < childCount; ++c) {
+                if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) && 
+                        child[c]->stdev < PP_SIGMA &&
+                        (temp = (child[c]->rightExpectedOutcome())) < smallestRightExpectedOutcome) {
+                    smallestRightExpectedOutcome = temp;
+                }
+            }
+            for (int c = 0; c < childCount; ++c) {
+                if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
+                        child[c]->stdev < PP_SIGMA &&
+                        (temp = (child[c]->leftExpectedOutcome())) > smallestRightExpectedOutcome ) {
+                    child[c]->pruned = true;
+                }
+            }
 
-        // prune child that is isStatisticallyInferiorTo largestLeftExpectedOutcome
-        for (int c = 0; c < childCount; ++c) {
-            if ((child[c]->trial >= MIN_PRUNE_NUM_TRIAL) && !(child[c]->pruned) &&
-                    child[c]->stdev < PP_SIGMA &&
-                    (temp = (child[c]->rightExpectedOutcome())) < largestLeftExpectedOutcome) {
-#ifdef LOG
-                // flog <<"pruned " << c << " " << child[c]->rightExpectedOutcome() << endl;
-                // cerr << "pruned" << endl;
-#endif
-                child[c]->pruned = true;
-            }
         }
-        
     }
 
     // pruneScoreUpdate: the method of updating the prune score
     // 0: normal (+1 win, 0 draw, -1 lose)
     // 1: 1/sqrt(board.steps) * (+1 win, 0 draw, -1 lose) when winner is decided
-    void runRandomTrial (int numTrial, bool ourPlayer, int pruneScoreUpdate = 0) {
+    void runRandomTrial (int numTrial, int pruneScoreUpdate = 0) {
         pair<int, int> move;
         double tempSum1 = 0, tempSum2 = 0, tempX;
         for (int t = 0; t < numTrial; ++t) {
@@ -822,7 +836,7 @@ struct TreeNode {
                     break;
                 }
             }
-            if (board.winner == ourPlayer) {
+            if (board.winner == currentOurPlayer) {
                 scoreWin += 1;
                 if (pruneScoreUpdate == 1) {
                     tempX = 1.0 / sqrt(board.steps);
@@ -870,7 +884,7 @@ struct TreeNode {
     }
 
     // return the best children
-    void runRandomTrialForAllChildren (int numTrial, bool ourPlayer) {
+    void runRandomTrialForAllChildren (int numTrial) {
         int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
         int batchNumTrial = numTrial / 10, currentChildTrial = 0;
         for (int c = 0; c < childCount; ++c) {
@@ -879,7 +893,7 @@ struct TreeNode {
 #endif
             currentChildTrial = 0;
             while (currentChildTrial < numTrial) {
-                child[c]->runRandomTrial(batchNumTrial, ourPlayer);
+                child[c]->runRandomTrial(batchNumTrial);
                 currentChildTrial += batchNumTrial;
                 if (currentChildTrial >= MIN_PRUNE_NUM_TRIAL) {
                     // try pruning child
@@ -902,7 +916,7 @@ struct TreeNode {
     }
 
     // run uneven trials for each children
-    void runUnevenTrialsForAllChildren(int leastTrial, bool ourPlayer, int pruneScoreUpdate) {
+    void runUnevenTrialsForAllChildren(int leastTrial, int pruneScoreUpdate) {
         VII betterMoves = board.getBetterMoves();
         int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
         double sum1Added = 0, sum2Added = 0;
@@ -916,7 +930,7 @@ struct TreeNode {
 #endif
                 currentChildTrial *= 2;
             }
-            child[c]->runRandomTrial(currentChildTrial, ourPlayer, 1);
+            child[c]->runRandomTrial(currentChildTrial, 1);
             trialAdded += currentChildTrial;
             winAdded += child[c]->scoreWin;
             drawAdded += child[c]->scoreDraw;
@@ -928,13 +942,17 @@ struct TreeNode {
             }
         }
         // cerr << "runUneven " << sum1Added << " " << sum2Added << endl;
+#ifdef PRUNE
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, false, pruneScoreUpdate, sum1Added, sum2Added);
+#else
         updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true, pruneScoreUpdate, sum1Added, sum2Added);
+#endif
     }
     
     // run uneven trials for all children, specifiying a total trials
     // where sum(all children trials) <= totalTrial
     // each of the betterMoves move gets twice of trial.
-    void runUnevenTrialsForAllChildrenTotal(int totalTrial, bool ourPlayer, int pruneScoreUpdate) {
+    void runUnevenTrialsForAllChildrenTotal(int totalTrial, int pruneScoreUpdate) {
         VII betterMoves = board.getBetterMoves();
         int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
         double sum1Added = 0, sum2Added = 0;
@@ -949,7 +967,7 @@ struct TreeNode {
 #endif
                 currentChildTrial *= 2;
             }
-            child[c]->runRandomTrial(currentChildTrial, ourPlayer, 1);
+            child[c]->runRandomTrial(currentChildTrial, 1);
             trialAdded += currentChildTrial;
             winAdded += child[c]->scoreWin;
             drawAdded += child[c]->scoreDraw;
@@ -961,11 +979,16 @@ struct TreeNode {
             }
         }
         // cerr << "runUneven " << sum1Added << " " << sum2Added << endl;
+#ifdef PRUNE
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, false, pruneScoreUpdate, sum1Added, sum2Added);
+#else
         updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true, pruneScoreUpdate, sum1Added, sum2Added);
+#endif
     }
 
     PII getRandomTrialScoreMove () {
-        bool ourPlayer = board.turn;
+        // bool ourPlayer = board.turn;
+        currentOurPlayer = board.turn;
         VII possibleMoves = board.getAllMoves();
         childCount = possibleMoves.size();
 #ifdef LOG
@@ -978,7 +1001,7 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode (&board, possibleMoves[c] ,this, MIN_NODE);
         }
-        runRandomTrialForAllChildren (3000, ourPlayer);
+        runRandomTrialForAllChildren (3000);
         int bestMove = findBestChildByUCB();
 #ifdef LOG
         flog << "Best move: Child " << bestMove << ", best score: " << child[bestMove]->UCBScore(sqrtLogN) << endl << flush;
@@ -987,7 +1010,7 @@ struct TreeNode {
     }
 
     // return false if should stop searching, true otherwise
-    bool pvSearchWithUCB (bool ourPlayer, int depth, bool isEvenlyRandom = true, int pruneScoreUpdate = 0, int trialCountType = 0) {
+    bool pvSearchWithUCB (int depth, bool isEvenlyRandom = true, int pruneScoreUpdate = 0, int trialCountType = 0) {
         if (depth > maxPVDepth) {
             maxPVDepth = depth;
 
@@ -1008,7 +1031,7 @@ struct TreeNode {
         */
         if (childCount >= 1) {
             currentBestChild = findBestChildByUCB();
-            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, depth + 1, isEvenlyRandom, pruneScoreUpdate, trialCountType);
+            return child[currentBestChild]->pvSearchWithUCB(depth + 1, isEvenlyRandom, pruneScoreUpdate, trialCountType);
         }
         if (board.winner != 2) {
             return false;
@@ -1026,14 +1049,14 @@ struct TreeNode {
         }
         if (trialCountType == 0) {
             if (isEvenlyRandom) {
-                runRandomTrialForAllChildren (500, ourPlayer);
+                runRandomTrialForAllChildren (500);
             }
             else {
-                runUnevenTrialsForAllChildren(300, ourPlayer, pruneScoreUpdate);
+                runUnevenTrialsForAllChildren(300, pruneScoreUpdate);
             }
         }
         else if (trialCountType == 1) {
-            runUnevenTrialsForAllChildrenTotal(4000, ourPlayer, pruneScoreUpdate);
+            runUnevenTrialsForAllChildrenTotal(4000, pruneScoreUpdate);
         }
         
         // updateBestChild();
@@ -1045,6 +1068,7 @@ struct TreeNode {
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         maxPVDepth = 0;
         minSteps = 10000;
+        currentOurPlayer = board.turn;
 #ifdef LOG 
             flog << "isEvenlyRandom " << isEvenlyRandom << endl;
             flog << "pruneScoreUpdate " << pruneScoreUpdate << endl;
@@ -1052,7 +1076,7 @@ struct TreeNode {
 #endif
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
-            if (!pvSearchWithUCB (board.turn, 0, isEvenlyRandom, pruneScoreUpdate, trialCountType)) { break; }
+            if (!pvSearchWithUCB (0, isEvenlyRandom, pruneScoreUpdate, trialCountType)) { break; }
             if (childCount == 1) { break; }
             // updateBestChild();
         }
