@@ -36,7 +36,7 @@ using namespace std;
 
 //const double UCB_C = 1.18;      // exploration coefficient of UCB
 const double UCB_C = 1.18;
-const double timerMaxAllow = 6; // max allow time in seconds
+const double timerMaxAllow = 9; // max allow time in seconds
 #define MAX_PV_DEPTH 100
 
 const double PP_RD = 1;
@@ -930,6 +930,39 @@ struct TreeNode {
         // cerr << "runUneven " << sum1Added << " " << sum2Added << endl;
         updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true, pruneScoreUpdate, sum1Added, sum2Added);
     }
+    
+    // run uneven trials for all children, specifiying a total trials
+    // where sum(all children trials) <= totalTrial
+    // each of the betterMoves move gets twice of trial.
+    void runUnevenTrialsForAllChildrenTotal(int totalTrial, bool ourPlayer, int pruneScoreUpdate) {
+        VII betterMoves = board.getBetterMoves();
+        int winAdded = 0, drawAdded = 0, loseAdded = 0, trialAdded = 0;
+        double sum1Added = 0, sum2Added = 0;
+        int leastTrial = totalTrial / (childCount + betterMoves.size());
+        for (int c = 0; c < childCount; ++c) {
+            int currentChildTrial = leastTrial;
+            // is this move a betterMove?
+            VII::iterator findResult = find(betterMoves.begin(), betterMoves.end(), child[c]->move);
+            if (findResult != betterMoves.end()) {
+#ifdef LOG
+                //cerr << "isBetterMove" << endl;
+#endif
+                currentChildTrial *= 2;
+            }
+            child[c]->runRandomTrial(currentChildTrial, ourPlayer, 1);
+            trialAdded += currentChildTrial;
+            winAdded += child[c]->scoreWin;
+            drawAdded += child[c]->scoreDraw;
+            loseAdded += child[c]->scoreLose;
+            if (pruneScoreUpdate == 1) {
+                // cerr << "runUnEven" << child[c]->sum1 << " " << child[c]->sum2 << endl;
+                sum1Added += child[c] -> sum1;
+                sum2Added += child[c] -> sum2;
+            }
+        }
+        // cerr << "runUneven " << sum1Added << " " << sum2Added << endl;
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true, pruneScoreUpdate, sum1Added, sum2Added);
+    }
 
     PII getRandomTrialScoreMove () {
         bool ourPlayer = board.turn;
@@ -954,16 +987,16 @@ struct TreeNode {
     }
 
     // return false if should stop searching, true otherwise
-    bool pvSearchWithUCB (bool ourPlayer, int depth, bool isEvenlyRandom = true, int pruneScoreUpdate = 0) {
+    bool pvSearchWithUCB (bool ourPlayer, int depth, bool isEvenlyRandom = true, int pruneScoreUpdate = 0, int trialCountType = 0) {
         if (depth > maxPVDepth) {
             maxPVDepth = depth;
-#ifdef LOG
+
             TreeNode* n = parent;
             while (n->parent != nullptr) { n = n->parent; }
             int nodeCount = n->numNode();
             cerr << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
-            flog << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
-#endif
+            //flog << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
+
         }
 
 
@@ -975,7 +1008,7 @@ struct TreeNode {
         */
         if (childCount >= 1) {
             currentBestChild = findBestChildByUCB();
-            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, depth + 1, isEvenlyRandom);
+            return child[currentBestChild]->pvSearchWithUCB(ourPlayer, depth + 1, isEvenlyRandom, pruneScoreUpdate, trialCountType);
         }
         if (board.winner != 2) {
             return false;
@@ -991,24 +1024,35 @@ struct TreeNode {
         for (int c = 0; c < childCount; ++c) {
             child[c] = new TreeNode(&board, possibleMoves[c], this, !nodeType);
         }
-        if (isEvenlyRandom) {
-            runRandomTrialForAllChildren (500, ourPlayer);
+        if (trialCountType == 0) {
+            if (isEvenlyRandom) {
+                runRandomTrialForAllChildren (500, ourPlayer);
+            }
+            else {
+                runUnevenTrialsForAllChildren(300, ourPlayer, pruneScoreUpdate);
+            }
         }
-        else {
-            runUnevenTrialsForAllChildren(300, ourPlayer, pruneScoreUpdate);
+        else if (trialCountType == 1) {
+            runUnevenTrialsForAllChildrenTotal(4000, ourPlayer, pruneScoreUpdate);
         }
+        
         // updateBestChild();
         return true;
     }
 
-    PII getMonteCarloBasicMove (bool isEvenlyRandom = true, int pruneScoreUpdate = 0) {
+    PII getMonteCarloBasicMove (bool isEvenlyRandom = true, int pruneScoreUpdate = 0, int trialCountType = 0) {
         double timerElapsed;
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         maxPVDepth = 0;
         minSteps = 10000;
+#ifdef LOG 
+            flog << "isEvenlyRandom " << isEvenlyRandom << endl;
+            flog << "pruneScoreUpdate " << pruneScoreUpdate << endl;
+            flog << "trialCountType " << trialCountType << endl;
+#endif
         while ((timerElapsed = chrono::duration_cast<chrono::duration<double>>(chrono::steady_clock::now() - timerStart).count()) 
                 < timerMaxAllow) {
-            if (!pvSearchWithUCB (board.turn, 0, isEvenlyRandom, pruneScoreUpdate)) { break; }
+            if (!pvSearchWithUCB (board.turn, 0, isEvenlyRandom, pruneScoreUpdate, trialCountType)) { break; }
             if (childCount == 1) { break; }
             // updateBestChild();
         }

@@ -15,7 +15,14 @@ all: src/agent.cpp src/board.hpp src/agentRT.cpp
 	$(CPLUSPLUS) -D LOG src/agentMCTUneven.cpp -o target/agentMCTUneven-log -g
 	$(CPLUSPLUS) src/agentMCTUnevenPrune.cpp -o target/agentMCTUnevenPrune
 	$(CPLUSPLUS) -D LOG src/agentMCTUnevenPrune.cpp -o target/agentMCTUnevenPrune-log -g
+	$(CPLUSPLUS) src/agentMCTUnevenTotalTrial.cpp -o target/agentMCTUnevenTotalTrial
+	$(CPLUSPLUS) -D LOG src/agentMCTUnevenTotalTrial.cpp -o target/agentMCTUnevenTotalTrial-log -g
 	$(DEL) *.o
+
+unevenTotalTrial: src/agentMCTUnevenTotalTrial.cpp
+	mkdir -p target
+	$(CPLUSPLUS) src/agentMCTUnevenTotalTrial.cpp -o target/agentMCTUnevenTotalTrial
+	$(CPLUSPLUS) -D LOG src/agentMCTUnevenTotalTrial.cpp -o target/agentMCTUnevenTotalTrial-log -g
 
 testRandom: src/testRandom.cpp
 	mkdir -p target
