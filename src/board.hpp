@@ -420,7 +420,7 @@ struct _game_board {
                     // Does b exist?
                     Cube* target = board[poss].c;
                     // compare color and size of cube's num
-                    if (target != nullptr && ABS(target->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                    if (target != nullptr && target->color() != currentCube->color()) {
                         bool better = true;
                         // Does c,d,e exist?
                         for (int k = 0; k < 3; ++k) {
@@ -429,9 +429,8 @@ struct _game_board {
                             posss = yyy * BOARD_WIDTH + xxx;
                             if (isOut(yyy, xxx)) { continue; }
                             Cube* trap = board[posss].c;
-                            if (trap != nullptr && 
-                                    ABS(target->cubeNumber) > ABS(currentCube->cubeNumber) &&
-                                    ABS(trap->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                            if (trap != nullptr && target->num() < currentCube->num() && 
+                                    trap->color() != currentCube->color() && trap->num() > currentCube->num()) {
                                 better = false;
                                 break;
                             }
@@ -463,7 +462,7 @@ struct _game_board {
                     poss = yy * BOARD_WIDTH + xx;
                     if (isOut(yy, xx)) { continue; }
                     Cube* target = board[poss].c;
-                    if (target != nullptr && ABS(target->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                    if (target != nullptr && target->color() != currentCube->color()) {
                         bool better = true;
                         // Does c,d,e exist?
                         for (int k = 0; k < 3; ++k) {
@@ -472,9 +471,8 @@ struct _game_board {
                             posss = yyy * BOARD_WIDTH + xxx;
                             if (isOut(yyy, xxx)) { continue; }
                             Cube* trap = board[posss].c;
-                            if (trap != nullptr && 
-                                    ABS(target->cubeNumber) > ABS(currentCube->cubeNumber) &&
-                                    ABS(trap->cubeNumber + currentCube->cubeNumber) < ABS(currentCube->cubeNumber)) {
+                            if (trap != nullptr && target->num() < currentCube->num() && 
+                                    trap->color() != currentCube->color() && trap->num() > currentCube->num()) {
                                 better = false;
                                 break;
                             }
@@ -602,7 +600,7 @@ struct TreeNode {
 
     // statistics: for each simulation,
     // old: 1 = win, 0 = draw, -1 = lose
-    // new: 1/sqrt(board.steps) * ((winner == ourPlayer)? 1: -1);
+    // new: 1/sqrt(board.steps) * ((winner == parent.turn)? 1: -1);
     double sum1 = 0;               // = \Sigma x_i
     double sum2 = 0;               // = \Sigma X_i^2
     int pruned = false;         // is this node pruned in progressive pruning?
@@ -930,7 +928,7 @@ struct TreeNode {
             }
         }
         // cerr << "runUneven " << sum1Added << " " << sum2Added << endl;
-        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, false, pruneScoreUpdate, sum1Added, sum2Added);
+        updateScoreFromChild(winAdded, drawAdded, loseAdded, trialAdded, true, pruneScoreUpdate, sum1Added, sum2Added);
     }
 
     PII getRandomTrialScoreMove () {
@@ -997,7 +995,7 @@ struct TreeNode {
             runRandomTrialForAllChildren (500, ourPlayer);
         }
         else {
-            runUnevenTrialsForAllChildren(350, ourPlayer, pruneScoreUpdate);
+            runUnevenTrialsForAllChildren(300, ourPlayer, pruneScoreUpdate);
         }
         // updateBestChild();
         return true;
