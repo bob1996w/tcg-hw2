@@ -91,6 +91,16 @@ int main (int argv, char* argc[]) {
         }
 #ifdef LOG
         flog << "winner: " << "rb_x"[b->winner] << endl;
+        if (b->winner == 3) {
+            flog << "We draw" << endl;
+        }
+        else if ((b->winner == RED && ourPlayer == 'f') || 
+                (b->winner == BLUE && ourPlayer == 's')) {
+            flog << "We win" << endl;
+        }
+        else {
+            flog << "We lose" << endl;
+        }
         flog << "=====END=====" << endl << flush;
 #endif
         delete b;

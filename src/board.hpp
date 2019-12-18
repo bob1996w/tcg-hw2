@@ -51,6 +51,7 @@ int getUniformIntRandFixedSize(int);
 
 int maxPVDepth = 0;
 int minSteps = 10000;
+int totalTrialInOneDetermination = 0;
 
 bool currentOurPlayer = RED;
 
@@ -395,7 +396,7 @@ struct _game_board {
     // If we found a better move, return the move immediately.
     // Otherwise, return (-1, -1).
     PII getBetterMove() {
-        if (cubesLeft[turn] <= 2) { return make_pair(-1, -1); }
+        if (cubesLeft[turn] < 2) { return make_pair(-1, -1); }  
         int yy, xx, poss, yyy, xxx, posss;
         PII pos;
         for (int num = CUBE_NUM - 1; num >= 0; --num) {
@@ -451,42 +452,172 @@ struct _game_board {
     // if none, return empty vector
     VII getBetterMoves () {
         VII returnValues = vector<PII>();
-        if (cubesLeft[turn] <= 2) { return returnValues; }
-        int yy, xx, poss, yyy, xxx, posss;
+        for (int num = 0; num < CUBE_NUM ; ++num) {
+            PII pos = findCube(turn, num);
+            if (pos.first == -100) {
+                continue;
+            }
+            for (int dir = 0; dir < 3; ++dir) {
+                int yy = pos.first + dy[turn][dir];
+                int xx = pos.second + dx[turn][dir];
+                if (isOut(yy, xx)) {
+                    continue;
+                }
+                if (isBetterMove(make_pair(num, dir))) {
+                    returnValues.emplace_back(num, dir);
+                }
+            }
+        }
+        return returnValues;
+    }
+
+    bool isBetterMove (PII move) {
+        int num = move.first, dir = move.second;
+        PII pos = findCube(turn, num);
+        int yy = pos.first + dy[turn][dir];
+        int xx = pos.second + dx[turn][dir];
+        int place = yy * BOARD_WIDTH + xx;
+
+        // 0: enemy reach and larger than us
+        if (turn == RED && place == 35) {
+            if (board[0].c != nullptr && board[0].c->color() == BLUE && num < board[0].c->num()) { return true; }
+        }
+        if (turn == BLUE && place == 0) {
+            if (board[35].c != nullptr && board[35].c->color() == RED && num < board[35].c->num()) { return true; }
+        }
+
+        // 1: be eaten
+        int yyy, xxx, posss;
+        Cube* currentCube = board[pos.first * BOARD_WIDTH + pos.second].c;
+        // if (isOut(yy, xx)) { continue; }
+        Cube* target = board[place].c;
+        if (target != nullptr && target->color() != currentCube->color()) {
+            bool better = true;
+            for (int k = 0; k < 3; ++k) {
+                yyy = yy + dy[turn][k];
+                xxx = xx + dx[turn][k];
+                posss = yyy * BOARD_WIDTH + xxx;
+                if (isOut(yyy, xxx)) { continue; }
+                Cube* trap = board[posss].c;
+                if (trap != nullptr && target->num() < currentCube->num() && 
+                        trap->color() != currentCube->color() && trap->num() > currentCube->num()) {
+                    better = false;
+                    break;
+                }
+            }
+            if (better) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    VII getFilteredMoves () {
+        int nodeList[6] = {0, 1, 2, 3, 4, 5};
+        int num, dir, yy, xx;
+        // Fisher–Yates shuffle
+        for (int i = 0; i < 5; ++i) {
+            swap (nodeList[i], nodeList[i + getUniformIntRandFixedSize(6 - i)]);
+        }
+        int dirList[3] = {0, 1, 2};
+        for (int i = 0; i < 2; ++i) {
+            swap (dirList[i], dirList[i + getUniformIntRandFixedSize(3 - i)]);
+        }
+        VII betterMoves;
+        VII res;
+        VII worseMoves;
+        for (int index = 0; index < CUBE_NUM; ++index) {
+            num = nodeList[index];
+            PII pos = findCube(turn, num);
+            if (pos.first == -100) {
+                continue;
+            }
+            for (int dirIndex = 0; dirIndex < 3; ++dirIndex) {
+                dir = dirList[dirIndex];
+                yy = pos.first + dy[turn][dir];
+                xx = pos.second + dx[turn][dir];
+                if (isOut(yy, xx)) {
+                    continue;
+                }
+#ifdef LOG
+                // flog << "turn " << turn << endl;
+                // flog << "num dir = " << num << " " << dir << endl << flush;
+#endif
+                if (isBetterMove(make_pair(num, dir))) {
+                    betterMoves.emplace_back(num, dir);
+                }
+                else if (isWorseMove(make_pair(num, dir))) {
+                    // we still need to save the worse moves because we might
+                    // end up no moves other than worseMoves.
+                    worseMoves.emplace_back(num, dir);
+                }
+                else {
+                    res.emplace_back(num, dir);
+                }
+            }
+        }
+        if (!betterMoves.empty()) {
+            return betterMoves;
+        }
+        else if (!res.empty()) {
+            return res;
+        }
+        else if (!worseMoves.empty()) {
+            return worseMoves;
+        }
+        else {
+            res.emplace_back(15, 15);
+            return res;
+        }
+    }
+
+    /*
+    VII getWorseMoves () {
+        VII returnValues = vector<PII>();
+        int yy, xx;
         PII pos;
-        for (int num = CUBE_NUM - 1; num >= 0; --num) {
-            if (cubes[turn][num].isOnBoard()) {
-                pos = findCube(turn, num);
-                Cube* currentCube = board[pos.first * BOARD_WIDTH + pos.second].c;
-                for (int dir = 0; dir < 3; ++dir) {
-                    yy = pos.first + dy[turn][dir];
-                    xx = pos.second + dx[turn][dir];
-                    poss = yy * BOARD_WIDTH + xx;
-                    if (isOut(yy, xx)) { continue; }
-                    Cube* target = board[poss].c;
-                    if (target != nullptr && target->color() != currentCube->color()) {
-                        bool better = true;
-                        // Does c,d,e exist?
-                        for (int k = 0; k < 3; ++k) {
-                            yyy = yy + dy[turn][k];
-                            xxx = xx + dx[turn][k];
-                            posss = yyy * BOARD_WIDTH + xxx;
-                            if (isOut(yyy, xxx)) { continue; }
-                            Cube* trap = board[posss].c;
-                            if (trap != nullptr && target->num() < currentCube->num() && 
-                                    trap->color() != currentCube->color() && trap->num() > currentCube->num()) {
-                                better = false;
-                                break;
-                            }
-                        }
-                        if (better) {
+        if (turn == RED) {
+            if (!board[0].hasCube() || board[0].c->color() == turn) {
+                for (int num = CUBE_NUM - 1; num >= 0; --num) {
+                    pos = findCube(turn, num);
+                    Cube* currentCube = board[pos.first * BOARD_WIDTH + pos.second].c;
+                    for (int dir = 0; dir < 3; ++dir) {
+                        yy = pos.first + dy[turn][dir];
+                        xx = pos.second + dx[turn][dir];
+                        if (yy == 5 && xx == 5) {
                             returnValues.emplace_back(num, dir);
                         }
                     }
                 }
             }
         }
+        else {
+            if (!board[35].hasCube() || board[35].c->color() == turn) {
+                for (int num = CUBE_NUM - 1; num >= 0; --num) {
+                    pos = findCube(turn, num);
+                    Cube* currentCube = board[pos.first * BOARD_WIDTH + pos.second].c;
+                    for (int dir = 0; dir < 3; ++dir) {
+                        yy = pos.first + dy[turn][dir];
+                        xx = pos.second + dx[turn][dir];
+                        if (yy == 0 && xx == 0) {
+                            returnValues.emplace_back(num, dir);
+                        }
+                    }
+                }
+            }
+        }
+        
         return returnValues;
+    }
+    */
+
+    bool isWorseMove (PII move) {
+        PII pos = findCube(turn, move.first);
+        int yy = pos.first + dy[turn][move.second];
+        int xx = pos.second + dx[turn][move.second];
+        int place = yy * BOARD_WIDTH + xx;
+        return (turn == RED && (board[0].c == nullptr || board[0].c->color() == turn) && place == 35) || 
+                (turn == BLUE && (board[35].c == nullptr || board[35].c->color() == turn) && place == 0);
     }
 
     string sendMove(PII move) {
@@ -805,6 +936,7 @@ struct TreeNode {
     // 1: 1/sqrt(board.steps) * (+1 win, 0 draw, -1 lose) when winner is decided
     void runRandomTrial (int numTrial, int pruneScoreUpdate = 0) {
         pair<int, int> move;
+        VII moves;
         double tempSum1 = 0, tempSum2 = 0, tempX;
         for (int t = 0; t < numTrial; ++t) {
             int turns = 0;
@@ -813,14 +945,17 @@ struct TreeNode {
     #ifdef LOG
                 //cerr << "running betterMove" << endl << flush;
     #endif
-                move = board.getBetterMove();
+                // move = board.getBetterMove();
     #ifdef LOG
                 //cerr << "end betterMove" << endl << flush;
                 //cerr << move.first << " " << move.second << endl << flush;
     #endif
-                if (move.first == -1) {
-                    move = board.getRandomMove();
-                }
+                //if (move.first == -1) {
+                    //moves = board.getFilteredWorseMoves();
+                    //move = moves.at(0);
+                    //move = board.getRandomMove();
+                //}
+                move = board.getFilteredMoves()[0];
 #else
                 move = board.getRandomMove();
 #endif
@@ -862,6 +997,7 @@ struct TreeNode {
             }
 #endif
             board.resetBoard();
+            totalTrialInOneDetermination += 1;
         }
         trial += numTrial;
         if (pruneScoreUpdate == 0) {
@@ -965,7 +1101,7 @@ struct TreeNode {
 #ifdef LOG
                 //cerr << "isBetterMove" << endl;
 #endif
-                currentChildTrial *= 2;
+                currentChildTrial = (int)((double) currentChildTrial * 2);
             }
             child[c]->runRandomTrial(currentChildTrial, 1);
             trialAdded += currentChildTrial;
@@ -1068,6 +1204,7 @@ struct TreeNode {
         decltype(chrono::steady_clock::now()) timerStart = chrono::steady_clock::now();
         maxPVDepth = 0;
         minSteps = 10000;
+        totalTrialInOneDetermination = 0;
         currentOurPlayer = board.turn;
 #ifdef LOG 
             flog << "isEvenlyRandom " << isEvenlyRandom << endl;
@@ -1083,7 +1220,8 @@ struct TreeNode {
         int bestMove = findBestWinRate();
 #ifdef LOG
         flog << "board.turn = " << string((board.turn == RED)? "RED" : "BLUE") << endl << flush; 
-        flog << printNode(0) << endl << flush;
+        // flog << printNode(0) << endl << flush;
+        flog << "totalTrialInOneDetermination = " << totalTrialInOneDetermination << endl << flush;
 #endif
         return child[bestMove]->move;
     }
