@@ -1153,7 +1153,7 @@ struct TreeNode {
             TreeNode* n = parent;
             while (n->parent != nullptr) { n = n->parent; }
             int nodeCount = n->numNode();
-            cerr << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
+            // cerr << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
             //flog << "Max PV Depth " << maxPVDepth << ", node " << nodeCount << endl;
 
         }
